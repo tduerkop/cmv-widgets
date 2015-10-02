@@ -1,28 +1,26 @@
 define([
     'dojo/_base/declare',
     'dojo/_base/lang',
+    'dojo/sniff',
 
     'esri/layers/GraphicsLayer',
     'esri/graphic',
     'esri/symbols/SimpleMarkerSymbol',
     'esri/symbols/SimpleLineSymbol',
     'esri/symbols/SimpleFillSymbol',
-    'esri/dijit/PopupTemplate',
-    'esri/graphicsUtils',
-    'esri/geometry/Extent'
+    'esri/graphicsUtils'
 
 ], function (
     declare,
     lang,
+    has,
 
     GraphicsLayer,
     Graphic,
     SimpleMarkerSymbol,
     SimpleLineSymbol,
     SimpleFillSymbol,
-    PopupTemplate,
-    graphicsUtils,
-    Extent
+    graphicsUtils
 ) {
 
     return declare(null, {
@@ -235,35 +233,44 @@ define([
         *******************************/
 
         addGraphicsLayer: function () {
-            this.featureGraphics = new GraphicsLayer({
-                id: this.topicID + '_FeatureGraphics',
-                title: 'Attribute Feature Graphics'
-            });
-            if (this.featureOptions && this.featureOptions.selected !== false) {
-                this.featureGraphics.on('click', lang.hitch(this, 'selectFeatureFromMap'));
-                this.featureGraphics.on('mouse-over', lang.hitch(this, 'highlightGraphic'));
-                this.featureGraphics.on('mouse-out', lang.hitch(this, 'unhighlightGraphic'));
-            }
-            this.map.addLayer(this.featureGraphics);
-
-
             this.sourceGraphics = new GraphicsLayer({
                 id: this.topicID + '_SourceGraphics',
                 title: 'Attribute Source Graphics'
             });
             this.map.addLayer(this.sourceGraphics);
 
-            this.selectedGraphics = new GraphicsLayer({
-                id: this.topicID + '_SelectedGraphics',
-                title: 'Attribute Selected Graphics'
-            });
-            this.map.addLayer(this.selectedGraphics);
-
             this.bufferGraphics = new GraphicsLayer({
                 id: this.topicID + '_BufferGraphics',
                 title: 'Attribute Buffer Graphics'
             });
             this.map.addLayer(this.bufferGraphics);
+
+            this.featureGraphics = new GraphicsLayer({
+                id: this.topicID + '_FeatureGraphics',
+                title: 'Attribute Feature Graphics'
+            });
+            if (this.featureOptions && this.featureOptions.selected !== false) {
+                this.featureGraphics.on('click', lang.hitch(this, 'selectFeatureFromMap'));
+
+                /** HACK **
+                    The 'mouse-out' event for a GraphicsLayer is not triggered for Microsoft IE or Microsoft Edge. This appears to be due to a bug with the ESRI JavaScript API. As a result, we can't highlight a feature when the mouse is over that feature in those browser.
+                */
+                if (!has('ie') && !has('trident') && !(/Edge\/12./i.test(navigator.userAgent))) {
+                    this.featureGraphics.on('mouse-over', lang.hitch(this, function (evt) {
+                        this.highlightGraphic(evt, false);
+                    }));
+                    this.featureGraphics.on('mouse-out', lang.hitch(this, function (evt) {
+                            this.highlightGraphic(evt, true);
+                    }));
+                }
+            }
+            this.map.addLayer(this.featureGraphics);
+
+            this.selectedGraphics = new GraphicsLayer({
+                id: this.topicID + '_SelectedGraphics',
+                title: 'Attribute Selected Graphics'
+            });
+            this.map.addLayer(this.selectedGraphics);
 
         },
 
@@ -289,8 +296,7 @@ define([
             if (symbol) {
                 graphic = new Graphic(feature.geometry, symbol, feature.attributes);
                 if (this.infoTemplate) {
-                    var infoTemplate = new PopupTemplate(this.infoTemplate);
-                    graphic.setInfoTemplate(infoTemplate);
+                    graphic.setInfoTemplate(this.infoTemplate);
                 }
                 this.featureGraphics.add(graphic);
             }
@@ -342,8 +348,7 @@ define([
             if (symbol) {
                 graphic = new Graphic(feature.geometry, symbol, feature.attributes);
                 if (this.infoTemplate) {
-                    var infoTemplate = new PopupTemplate(this.infoTemplate);
-                    graphic.setInfoTemplate(infoTemplate);
+                    graphic.setInfoTemplate(this.infoTemplate);
                 }
                 this.selectedGraphics.add(graphic);
             }
@@ -381,6 +386,8 @@ define([
                                 var zm = mnu.selected;
                                 mnu.selected = false;
                                 this.grid.select(row);
+                                this.grid.focus(row.element);
+                                row.element.focus();
                                 mnu.selected = zm;
                                 this.setToolbarButtons();
                             }
@@ -518,10 +525,6 @@ define([
                 }
             }
             this.setToolbarButtons();
-        },
-
-        unhighlightGraphic: function (evt) {
-            this.highlightGraphic(evt, true);
         },
 
         /*******************************

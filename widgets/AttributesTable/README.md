@@ -93,6 +93,11 @@ define({
             // other instances of attributes table
             topicID: 'query',
 
+            // allow tabs to be closed
+            // confirm tab closure
+            closable: true,
+            confirmClose: true,
+
             queryOptions: {
                 // parameters for the query
                 queryParameters: {
@@ -225,7 +230,7 @@ gridOptions: {
     columns: [],
 
     /*
-        no sort
+        no sort, use sort: 'inherit' to use the order of the query results.
     */
     sort: [],
 
@@ -272,9 +277,9 @@ gridOptions: {
 ``` javascript
 featureOptions: {
     /*
-        show the source feature used in the search
+        Show the resulting features on the map
     */
-    source: true,
+    features: true,
 
     /*
         Allow records to be selected in the grid
@@ -290,6 +295,11 @@ featureOptions: {
         Allow the user to highlight features that have been selected in the grid
     */
     highlight: true,
+
+    /*
+        Show the source feature used in the search
+    */
+    source: true,
 
     /*
         Allow the creation and display of a buffer
@@ -579,6 +589,9 @@ The Attribute Table subscribes to the following topics. The topicID should be un
 // execute a query
 topicID + '/executeQuery'
 
+// refresh the grid by running the previous query again
+topicID + '/refreshQuery'
+
 // populate the grid
 topicID + '/populateGrid'
 
@@ -587,6 +600,9 @@ topicID + '/clearGrid'
 
 // get the results of the query
 topicID + '/getQueryResults'
+
+// clear the results of the query
+topicID + '/clearQueryResults'
 
 // get the features
 topicID + '/getFeatures'

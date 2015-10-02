@@ -54,6 +54,8 @@ define([
         //geojson: false,     // allow features to be exported to GeoJSON
         //shapefile: false,   // allow the features to be exported to a Shape File
 
+        // featureSet to export
+        featureSet: null,
         // query results to export
         results: null,
         // optional grid if you want to export only visible columns and use column names
@@ -124,6 +126,7 @@ define([
         },
 
         openDialog: function (options) {
+            this.featureSet = options.featureSet;
             this.results = options.results;
             this.grid = options.grid;
 
@@ -193,10 +196,21 @@ define([
             var wbout = window.XLSX.write(wb, {
                 bookType: 'xlsx',
                 bookSST: true,
-                type: 'base64'
+                type: 'binary'
             });
 
-            this.downloadFile(wbout, 'application/vnd.ms-excel;base64;', 'results.xlsx', false);
+            this.downloadFile(this.s2ab(wbout), 'application/vnd.ms-excel;', 'results.xlsx', true);
+        },
+
+        s2ab: function (s) {
+            var buf = new ArrayBuffer(s.length);
+            var view = new Uint8Array(buf);
+            /*jslint bitwise: true */
+            for (var i=0; i!=s.length; ++i) {
+                view[i] = s.charCodeAt(i) & 0xFF;
+            }
+            /*jslint bitwise: false */
+            return buf;
         },
 
         exportToCSV: function () {
@@ -243,8 +257,9 @@ define([
             var c = 0,
                 field, val;
             var aliases = null; //this.results.fieldAliases;
-            var rows = this.grid.get('store').data;
-            var columns = this.grid.get('columns');
+            var rc = this.getRowsAndColumns();
+            var rows = rc.rows;
+            var columns = rc.columns;
             var wscols = [];
 
             // build the header row with field names
@@ -281,10 +296,13 @@ define([
                     if (column.exportable !== false && column.hidden !== true) {
                         field = column.field;
                         val = row[field];
-
+                        /*
+                        // this was specific to Stor; do we lose anything by removing it?
                         if (column.get) {
                             val = column.get(row);
+
                         }
+                        */
                         if (val === null) {
                             c++;
                             return;
@@ -412,6 +430,45 @@ define([
             }
         },
 
+        getRowsAndColumns: function() {
+            var rows = [];
+            var columns = [];
+            if(this.grid) {
+                rows = this.grid.get('store').data;
+                columns = this.grid.get('columns');
+            }
+            else if(this.featureSet) {
+                if(this.featureSet.features && this.featureSet.features.length > 0) {
+                    columns = [];
+                    var firstFeature = this.featureSet.features[0];
+                    for(var key in firstFeature.attributes) {
+                        if(firstFeature.attributes.hasOwnProperty(key)) {
+                            columns.push({
+                                exportable: true,
+                                hidden: false,
+                                label: this.featureSet.fieldAliases[key] || key,
+                                field: key,
+                                width: null
+                            });
+                        }
+                    }
+                    rows = array.map(this.featureSet.features, function(aFeature) {
+                        return aFeature.attributes;
+                    });
+                }
+                else {
+                    // cannot build columns because nothing to export; not really an error;
+                }
+            }
+            else {
+                // no datasource was provided; was not an error, so still not an error;
+            }
+            return {
+                rows: rows,
+                columns: columns
+            };
+        },
+
         /*******************************
         *  Download Functions
         *******************************/
@@ -436,27 +493,21 @@ define([
                 }
                 link.setAttribute('href', url);
                 link.setAttribute('download', fileName);
+                link.style = 'visibility:hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                return;
 
              //feature detection using IE10+ routine
-            } else if (navigator.msSaveBlob) {
-                if (!useBlob) {
-                    url = window.URL.createObjectURL(blob);
-                } else {
-                    url = blob;
-                }
-                link.addEventListener('click', function () {
-                    navigator.msSaveBlob(url, fileName);
-                }, false);
+            } else if (navigator.msSaveOrOpenBlob) {
+                return navigator.msSaveOrOpenBlob(blob, fileName);
             } else {
                 window.open(dataURI);
                 window.focus();
                 return;
             }
 
-            link.style = 'visibility:hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
         }
     });
 });

@@ -1,6 +1,7 @@
 define([
     'dojo/_base/declare',
     'dojo/_base/lang',
+    'dojo/_base/array',
     'dojo/topic',
 
     'esri/config',
@@ -14,6 +15,7 @@ define([
 ], function (
     declare,
     lang,
+    array,
     topic,
 
     esriConfig,
@@ -76,6 +78,7 @@ define([
             bufferParameters: {
                 distance: null,
                 unit: null,
+                geodesic: true,
                 showOnly: false
             },
 
@@ -86,7 +89,9 @@ define([
             linkField: null,
 
             // default Unique ID
-            idProperty: 'FID'
+            // if null, will attempt to get a field of
+            // type 'esriFieldTypeOID' from the results
+            idProperty: null
 
         },
 
@@ -229,10 +234,15 @@ define([
             buffParams.geometries = [this.queryParameters.geometry];
             buffParams.distances = [this.bufferParameters.distance];
             buffParams.unit = this.bufferParameters.unit || units.FEET;
+            buffParams.geodesic = this.bufferParameters.geodesic || true;
             buffParams.bufferSpatialReference = this.map.spatialReference;
             buffParams.outSpatialReference = this.map.spatialReference;
 
             esriConfig.defaults.geometryService.buffer(buffParams, lang.hitch(this, 'processBufferQueryResults'));
+        },
+
+        refreshQuery: function () {
+            this.executeQuery(this.queryOptions);
         },
 
         processQueryError: function (error) {
@@ -259,6 +269,10 @@ define([
 
             this.results = results;
             this.getFeaturesFromResults();
+
+            if (!this.idProperty) {
+                this.getIdProperty(results);
+            }
 
             var recCount = this.getFeatureCount();
             var msgNls = this.i18n.messages.searchResults;
@@ -344,6 +358,10 @@ define([
             return this.results;
         },
 
+        clearQueryResults: function () {
+            this.results = null;
+        },
+
         hasLinkedQuery: function () {
             var lq = this.linkedQuery;
             if (this.linkField && lq && lq.linkField) {
@@ -353,6 +371,19 @@ define([
                 return true;
             }
             return false;
+        },
+
+        // get the idProperty from an 'esriFieldTypeOID'
+        // type of field (if available) in the results
+        getIdProperty: function (results) {
+            var fields = results.fields;
+            if (fields && fields.length > 0) {
+                array.forEach(fields, lang.hitch(this, function (field) {
+                    if (field.type === 'esriFieldTypeOID') {
+                        this.idProperty = field.name;
+                    }
+                }));
+            }
         },
 
         getURL: function () {

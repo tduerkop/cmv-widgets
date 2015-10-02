@@ -1,7 +1,7 @@
 define([
     'dojo/_base/declare',
     'dojo/_base/lang',
-    'dojo/has',
+    'dojo/sniff',
     'dojo/_base/array',
     'dojo/date/locale',
     'dojo/number',
@@ -98,10 +98,12 @@ define([
                     gridOptions.allowFeatureSelectionAll = true;
                 }
 
-                if (options.pagination !== false) {
-                    req.push(Pagination);
-                    lang.mixin(gridOptions, options.paginationOptions);
+                // hack to show all records when there is no pagination
+                if (options.pagination !== true) {
+                    options.paginationOptions.rowsPerPage = 999999;
                 }
+                req.push(Pagination);
+                lang.mixin(gridOptions, options.paginationOptions);
 
                 // grid extensions
                 if (options.columnHide !== false) {
@@ -118,6 +120,11 @@ define([
                 this.grid = new AttributeGrid(gridOptions, this.attributesTableGridDijit.domNode);
                 this.grid.startup();
 
+                // don't show the footer when there is no pagination
+                if (options.pagination !== true) {
+                    this.grid.set('showFooter', false);
+                }
+
                 if (this.featureOptions.selected) {
                     this.grid.on('dgrid-select', lang.hitch(this, 'selectFeaturesFromGrid'));
                     this.grid.on('dgrid-deselect', lang.hitch(this, 'selectFeaturesFromGrid'));
@@ -130,6 +137,13 @@ define([
             var results = options;
             if (options.results) {
                 results = options.results;
+            }
+
+            if (!this.results) {
+                this.results = results;
+            }
+            if (!this.idProperty) {
+                this.getIdProperty(results);
             }
 
             var delim = '', linkField = this.linkField;
@@ -168,7 +182,10 @@ define([
                 }));
             }
 
-            this.grid.refresh();
+            // refresh only needs with IE?
+            if (has('ie')) {
+                this.grid.refresh();
+            }
             this.setToolbarButtons();
 
         },
@@ -251,6 +268,10 @@ define([
 
             // set the sort
             var sort = this.gridOptions.sort || [];
+            // sort === 'inherit'? use query result order
+            if (typeof sort === 'string' && sort.toLowerCase() === 'inherit'){
+                return;
+            }
             // no sort? use the first column
             if (sort.length < 1 && columns && columns.length > 0) {
                 sort = [

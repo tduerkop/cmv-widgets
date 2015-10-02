@@ -6,6 +6,9 @@ Widgets for [CMV](http://cmv.io/), the Configurable Map Viewer created by [Tim M
 
 [See them live!](http://tmcgee.github.io/cmv-widgets/)
 
+### Example Configurations
+Each widget in this repo has at least one configuration example in the [config folder](https://github.com/tmcgee/cmv-widgets/tree/master/config). This folder also contains additional examples for including ESRI widgets, other widgets and functionality.
+
 ### Attributes Table(s)
 A highly configurable widget to display the results of one or more QueryTasks.
 #####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/AttributesTable/README.md)
@@ -33,6 +36,12 @@ Export features from the [Attributes Tables](https://github.com/tmcgee/cmv-widge
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/export1.jpg)
 
 ---
+### Geoprocessor
+An example widget demonstrating the display of results from a Geoprocessing Task in the [Attributes Tables](https://github.com/tmcgee/cmv-widgets#attributes-tables) widget.
+#####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=geoprocessor)
+![Screenshot](https://tmcgee.github.io/cmv-widgets/images/geoprocessor1.jpg)
+
+---
 ### Multi-Field Geocoder
 Coming Soon
 
@@ -51,6 +60,13 @@ Used in conjunction with the [Attributes Tables](https://github.com/tmcgee/cmv-w
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/search1.jpg)
 
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/search2.jpg)
+
+---
+###Share
+Share your map by using Facebook, Twitter, Google+, E-Mail, Link, or embedded iFrame code.
+#####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/Share/README.md)
+#####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=share)
+![Screenshot](https://tmcgee.github.io/cmv-widgets/images/share1.jpg)
 
 ---
 ### Zoom to Feature
