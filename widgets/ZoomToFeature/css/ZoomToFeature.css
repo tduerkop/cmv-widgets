@@ -1,8 +1,8 @@
 .cmwZoomToFeatureWidget .featureSelect {
-    width:100%;
     margin-bottom: 10px;
+    width:100%;
 }
 
-.cmwZoomToFeatureWidget .clearButton {
-    float: right;
+.cmwZoomToFeatureWidget .buttonContainer {
+    text-align: right;
 }

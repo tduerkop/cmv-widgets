@@ -1,3 +1,4 @@
+/*eslint strict: 0, no-alert: 0 */
 define([
     'dojo/_base/declare',
     'dijit/_WidgetBase',
@@ -36,6 +37,8 @@ define([
     return declare([_WidgetBase, _Container], {
         baseClass: 'cmvAttributesContainerWidget',
         topicID: 'attributesContainer',
+        sidebarID: null,
+        sidebarPane: null,
 
         // i18n
         i18n: i18n,
@@ -53,13 +56,14 @@ define([
                 });
                 this.addChild(this.tabContainer);
                 this.tabContainer.startup();
-                this.tabContainer.watch('selectedChildWidget', function(name, oldVal, newVal){
+                this.tabContainer.watch('selectedChildWidget', function (name, oldVal, newVal) {
                     if (oldVal && oldVal.unselectTab) {
                         oldVal.unselectTab(name);
                     }
                     if (newVal && newVal.selectTab) {
                         newVal.selectTab(name);
                     }
+                    topic.publish(this.topicID + '/tableUpdated', newVal);
                 });
 
                 this.tabContainer.on('click', lang.hitch(this.tabContainer, function () {
@@ -76,11 +80,8 @@ define([
                 }
 
                 // just add a table
-            } else {
-                if (this.tables && this.tables.length > 0) {
-                    this.addTables(this.tables);
-                }
-
+            } else if (this.tables && this.tables.length > 0) {
+                this.addTables(this.tables);
             }
 
             aspect.after(this, 'resize', lang.hitch(this, 'resizeChildren'));
@@ -102,6 +103,15 @@ define([
 
             // remove a tab from the tab strip
             this.own(topic.subscribe(this.topicID + '/removeTab', lang.hitch(this, 'removeTab')));
+
+            // select a tab in the tab strip
+            this.own(topic.subscribe(this.topicID + '/selectTab', lang.hitch(this, 'selectTab')));
+
+            // open the sidebar pane
+            this.own(topic.subscribe(this.topicID + '/openPane', lang.hitch(this, 'openPane')));
+
+            // close the sidebar pane
+            this.own(topic.subscribe(this.topicID + '/closePane', lang.hitch(this, 'closePane')));
         },
 
         // add multiple tables
@@ -115,7 +125,7 @@ define([
         addTable: function (table) {
             var tab = this.addTab(table);
             topic.publish(this.topicID + '/tableAdded', tab);
-            return  tab;
+            return tab;
         },
 
         // remove a existing Table by ID
@@ -135,18 +145,19 @@ define([
             if (!options.id) {
                 options.id = 'attrTab-' + options.topicID;
             }
-            if (typeof options.closable == 'undefined'){
+            if (typeof options.closable === 'undefined') {
                 options.closable = true;
             }
-            if (typeof options.confirmClose == 'undefined'){
+            if (typeof options.confirmClose === 'undefined') {
                 options.confirmClose = true;
             }
             options.map = this.map;
             options.sidebarID = this.sidebarID;
+            options.attributesContainerID = this.topicID;
 
             if (this.useTabs) {
                 if (!tabs) {
-                    return;
+                    return null;
                 }
                 // see if the tab exists already
                 if (tabs.hasChildren()) {
@@ -158,12 +169,13 @@ define([
                     tab = new Table(options);
                     tab.startup();
                     tabs.addChild(tab);
+                    var self = this;
                     tab.onClose = lang.hitch(tab, function () {
                         var close = this.confirmClose ? confirm('Do you really want to close this tab?') : true;
-                        if (close && this.clearAll) {
-                            this.clearAll();
+                        if (close) {
+                            self.removeTab(tab.id);
                         }
-                        return close;
+                        return false;
                     });
                 }
                 if (tab && select !== false) {
@@ -177,6 +189,7 @@ define([
                     this.addChild(tab);
                 }
             }
+            topic.publish(this.topicID + '/tableUpdated', tab);
             return tab;
         },
 
@@ -188,27 +201,67 @@ define([
             }
             var tab = registry.byId(id);
             if (tab) {
-                if (tab.clearAll) {
-                    tab.clearAll();
-                }
                 tabs.removeChild(tab);
+                tab.destroy();
             }
             if (tabs.hasChildren()) {
-                tabs.selectChild(0);
+                tab = tabs.selectChild(0);
+                topic.publish(this.topicID + '/tableUpdated', tab);
+            } else {
+                this.closePane();
+                topic.publish(this.topicID + '/tableUpdated', null);
             }
+        },
+
+        // select an existing tab by ID
+        selectTab: function (id) {
+            var tabs = this.tabContainer;
+            var tab = registry.byId(id);
+            if (tab) {
+                tabs.selectChild(tab);
+            }
+            topic.publish(this.topicID + '/tableUpdated', tab);
         },
 
         getTab: function (options) {
             var tab = registry.byId(options.id);
             if (tab) {
                 if (options.queryOptions) {
-                    tab.clearAll();
-                    tab.executeQuery(options);
+                    tab.executeQueryTask(options);
+                } else if (options.findOptions) {
+                    tab.executeFindTask(options);
                 }
             }
             return tab;
         },
 
+        // get the sidebar pane containing the widget (if any)
+        getSidebarPane: function () {
+            if (!this.sidebarPane) {
+                this.sidebarPane = registry.byId(this.sidebarID);
+            }
+        },
+
+        // open the sidebar pane containing this widget (if any)
+        openPane: function () {
+            this.togglePane('block');
+        },
+
+        // open the sidebar pane containing this widget (if any)
+        closePane: function () {
+            this.togglePane('none');
+        },
+
+        togglePane: function (show) {
+            this.getSidebarPane();
+            if (this.sidebarPane) {
+                var paneID = this.sidebarPane.id.toLowerCase().replace('sidebar', '');
+                topic.publish('viewer/togglePane', {
+                    pane: paneID,
+                    show: show
+                });
+            }
+        },
         // this will resize all the children when the container is
         // is resized. This works when container is in the bottom pane.
         // Would it work with other panes? Is there a better way?
@@ -230,7 +283,7 @@ define([
                         top = 35;
                     }
                 }
-                children =this.tabContainer.getChildren();
+                children = this.tabContainer.getChildren();
 
             } else {
                 children = this.getChildren();

@@ -16,9 +16,11 @@ define({
                 title: 'Search Results',
                 message: null,
                 noFeatures: 'No features',
+                newFeatures: 'new',
                 feature: 'feature',
                 features: 'features',
-                found: 'found'
+                found: 'found',
+                total: 'total'
             }
         },
 
@@ -26,17 +28,20 @@ define({
             zoom: {
                 title: 'Zoom',
                 zoomToFeatures: 'Zoom To All Features',
-                zoomToSelectedFeatures: 'Zoom To Selected Features',
+                zoomToSelectedFeatures: 'Zoom To Selected Feature(s)',
+                zoomToSourceGraphics: 'Zoom To Source Graphic(s)',
                 zoomToBuffer: 'Zoom To Buffer'
             },
 
             clear: {
                 title: 'Clear',
                 clearFeatures: 'Clear All Features',
-                clearSelectedFeatures: 'Clear Selected Features',
+                clearSelectedFeatures: 'Clear Selected Feature(s)',
+                clearSourceGraphics: 'Clear Source Graphic(s)',
                 clearBufferGraphics: 'Clear Buffer',
                 clearGrid: 'Clear Grid',
-                clearAll: 'Clear All'
+                clearAll: 'Clear All',
+                clearSelectedRecords: 'Clear Selected Record(s)'
             },
 
             'export': {

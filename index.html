@@ -9,8 +9,6 @@
         <title>CMV Widgets</title>
         <link rel="stylesheet" href="./css/bootstrap.min.css" media="screen">
         <link rel="stylesheet" href="./css/cmv.css" media="screen">
-        <style>
-        </style>
     </head>
     <body>
         <div class="navbar navbar-default navbar-fixed-top">
@@ -52,7 +50,7 @@
                 <div class="row">
                     <div class="col-md-8 col-md-offset-2">
                         <h2 id="attributes-tables">Attributes Table(s)</h2>
-                        <p>A highly configurable widget to display the results of one or more QueryTasks.</p>
+                        <p>A highly configurable widget to display the results of one or more Query, Find or Geoprocessor Tasks.</p>
                         <p>
                             <a href="demo.html?config=table" target="cmv-demo-table" class="btn btn-primary btn-lg">Demo</a>
                         </p>
@@ -113,6 +111,22 @@
 
                 <div class="row">
                     <div class="col-md-8 col-md-offset-2">
+                        <h2 id="fullscreen">FullScreen</h2>
+                        <p>A simple widget containing a button to toggle the CMV map to a maximized full screen view and restore it to the original dimensions.</p>
+                        <p>
+                            <a href="demo.html?config=fullscreen" target="cmv-demo-fullscreen" class="btn btn-primary btn-lg">Demo</a>
+                        </p>
+                        <p>
+                            <a href="demo.html?config=fullscreen" target="cmv-demo-fullscreen">
+                                <div class="example"><img src="./images/fullscreen1.jpg" alt="Screenshot"></div>
+                            </a>
+                        </p>
+                        <br/><br/>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8 col-md-offset-2">
                         <h2 id="export">Geoprocessor</h2>
                         <p>An example widget demonstrating the display of results from a Geoprocessing Task in the Attributes Tables widget.</p>
                         <p>
@@ -155,7 +169,7 @@
                 <div class="row">
                     <div class="col-md-8 col-md-offset-2">
                         <h2 id="search">Search</h2>
-                        <p>Used in conjunction with the Attribute Table widget to provide a user interface for querying feature layers.</p>
+                        <p>Used in conjunction with the Attribute Table widget to provide a user interface for querying feature layers, dynamic layers, tables and related records using QueryTask and FindTask.</p>
                         <p>
                             <a href="demo.html?config=search" target="cmv-demo-search" class="btn btn-primary btn-lg">Demo</a>
                         </p>
@@ -175,7 +189,7 @@
 
                 <div class="row">
                     <div class="col-md-8 col-md-offset-2">
-                        <h2 id="search">Share</h2>
+                        <h2 id="share">Share</h2>
                         <p>Share your map by using Facebook, Twitter, Google+, E-Mail, Link, or embedded iFrame code.</p>
                         <p>
                             <a href="demo.html?config=share" target="cmv-demo-share" class="btn btn-primary btn-lg">Demo</a>
@@ -183,6 +197,19 @@
                         <p>
                             <a href="demo.html?config=share" target="cmv-demo-share">
                                 <div class="example"><img src="./images/share1.jpg" alt="Screenshot"></div>
+                            </a>
+                        </p>
+                        <br/><br/>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8 col-md-offset-2">
+                        <h2 id="what3words">What3Words</h2>
+                        <p>A simple widget to send a 3 word address or lat/lng to what3words and zoom the map to the resulting location. The lat/lng and 3 word address for the location are displayed from the search result.</p>
+                        <p>
+                            <a href="https://github.com/tmcgee/cmv-widgets/tree/master/widgets/What3Words" target="cmv-repo-what3words">
+                                <div class="example"><img src="./images/what3words1.jpg" alt="Screenshot"></div>
                             </a>
                         </p>
                         <br/><br/>

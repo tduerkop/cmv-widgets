@@ -1,3 +1,4 @@
+/*eslint strict: 0 */
 define([
     'dojo/_base/declare',
     'dijit/_WidgetBase',
@@ -12,7 +13,8 @@ define([
     'dijit/registry',
 
     // using mixins to make code easier to maintain
-    './_QueryMixin',
+    './_QueryTaskMixin',
+    './_FindTaskMixin',
     './_GridMixin',
     './_FeaturesMixin',
     './_GraphicsMixin',
@@ -49,6 +51,7 @@ define([
     registry,
 
     _QueryMixin,
+    _FindMixin,
     _GridMixin,
     _FeaturesMixin,
     _GraphicsMixin,
@@ -58,7 +61,17 @@ define([
     i18n
 ) {
 
-    return declare([_WidgetBase, _TemplatedMixin, _WidgetsInTemplateMixin, _GridMixin, _QueryMixin, _FeaturesMixin, _GraphicsMixin, _ToolbarMixin], {
+    return declare([
+        _WidgetBase,
+        _TemplatedMixin,
+        _WidgetsInTemplateMixin,
+        _GridMixin,
+        _QueryMixin,
+        _FindMixin,
+        _FeaturesMixin,
+        _GraphicsMixin,
+        _ToolbarMixin
+    ], {
         widgetsInTemplate: true,
         templateString: template,
         baseClass: 'cmvAttributesTableWidget',
@@ -99,9 +112,22 @@ define([
             this.createGrid();
             this.setToolbarButtons();
 
-            if (this.queryParameters.url || this.queryParameters.layerID) {
+            var options = {
+                queryOptions: this.queryOptions,
+                findOptions: this.findOptions,
+                gridOptions: this.gridOptions,
+                featureOptions: this.featureOptions,
+                symbolOptions: this.symbolOptions,
+                toolbarOptions: this.toolbarOptions
+            };
+
+            if (this.queryParameters && (this.queryParameters.url || this.queryParameters.layerID)) {
                 this.own(aspect.after(this, 'startup', lang.hitch(this, function () {
-                    this.executeQuery();
+                    this.executeQueryTask(options);
+                })));
+            } else if (this.findOptions && this.findOptions.url) {
+                this.own(aspect.after(this, 'startup', lang.hitch(this, function () {
+                    this.executeFindTask(options);
                 })));
             }
         },
@@ -111,6 +137,7 @@ define([
             if (!options) {
                 options = {
                     queryOptions: lang.clone(this.queryOptions),
+                    findOptions: lang.clone(this.findOptions),
                     gridOptions: lang.clone(this.gridOptions),
                     featureOptions: lang.clone(this.featureOptions),
                     symbolOptions: lang.clone(this.symbolOptions),
@@ -122,6 +149,9 @@ define([
             if (options.queryOptions) {
                 this.getQueryConfiguration(options.queryOptions);
             }
+            if (options.findOptions) {
+                this.getFindConfiguration(options.findOptions);
+            }
             if (options.gridOptions) {
                 this.getGridConfiguration(options.gridOptions);
             }
@@ -131,23 +161,35 @@ define([
             if (options.symbolOptions) {
                 this.getGraphicsConfiguration(options.symbolOptions);
             }
-            if  (options.toolbarOptions) {
+            if (options.toolbarOptions) {
                 this.getToolbarConfiguration(options.toolbarOptions);
             }
         },
 
         addTopics: function () {
-            // execute a query
-            this.own(topic.subscribe(this.topicID + '/executeQuery', lang.hitch(this, 'executeQuery')));
+            // execute a query task
+            this.own(topic.subscribe(this.topicID + '/executeQuery', lang.hitch(this, 'executeQueryTask')));
 
-            // refresh the grid by running the previous query again
-            this.own(topic.subscribe(this.topicID + '/refreshQuery', lang.hitch(this, 'refreshQuery')));
+            // refresh the grid by running the previous query task again
+            this.own(topic.subscribe(this.topicID + '/refreshQuery', lang.hitch(this, 'refreshQueryTask')));
 
-            // get the results of the query
+            // get the results of the query task
             this.own(topic.subscribe(this.topicID + '/getQueryResults', lang.hitch(this, 'getQueryResults')));
 
-            // clear the results of the query
+            // clear the results of the query task
             this.own(topic.subscribe(this.topicID + '/clearQueryResults', lang.hitch(this, 'clearQueryResults')));
+
+            // execute a find task
+            this.own(topic.subscribe(this.topicID + '/executeFind', lang.hitch(this, 'executeFindTask')));
+
+            // refresh the grid by running the previous find task again
+            this.own(topic.subscribe(this.topicID + '/refreshFind', lang.hitch(this, 'refreshFindTask')));
+
+            // get the results of the find task
+            this.own(topic.subscribe(this.topicID + '/getFindResults', lang.hitch(this, 'getFindResults')));
+
+            // clear the results of the find task
+            this.own(topic.subscribe(this.topicID + '/clearFindResults', lang.hitch(this, 'clearFindResults')));
 
             // populate the grid
             this.own(topic.subscribe(this.topicID + '/populateGrid', lang.hitch(this, 'populateGrid')));
@@ -233,7 +275,9 @@ define([
         },
 
         clearAll: function () {
-            this.clearQuery();
+            this.clearQueryResults();
+            this.clearFindResults();
+
             this.clearFeatures();
             this.clearSelectedFeatures();
 
@@ -258,6 +302,15 @@ define([
             this.gridOptions.sort = [];
         },
 
+        clearSelected: function () {
+            var selection = this.clearSelectedGridRows();
+            if (!selection) {
+                return;
+            }
+
+            this.clearFeatures(selection);
+        },
+
         clearGrowl: function () {
             var growl = registry.byId(this.growlID);
             if (growl && growl.close) {
@@ -266,20 +319,21 @@ define([
             }
         },
 
+        selectTab: function () {
+            this.showAllGraphics();
+            this.checkSizing();
+            topic.publish(this.attributesContainerID + '/tableUpdated', this);
+        },
+
+        unselectTab: function () {
+            this.hideAllGraphics();
+        },
+
         // get the sidebar pane containing the widget (if any)
         getSidebarPane: function () {
             if (!this.sidebarPane) {
                 this.sidebarPane = registry.byId(this.sidebarID);
             }
-        },
-
-        selectTab: function () {
-            this.showAllGraphics();
-            this.checkSizing();
-        },
-
-        unselectTab: function () {
-            this.hideAllGraphics();
         },
 
         /*
@@ -313,34 +367,28 @@ define([
             domStyle.set(bodyNode, 'margin-bottom', (ftrBox.h + 1) + 'px');
         },
 
-        // open the sidebar pane containing this widget (if any)
-        openPane: function () {
-            this.getSidebarPane();
-            if (this.sidebarPane) {
-                var paneID = this.sidebarPane.id.toLowerCase().replace('sidebar', '');
-                topic.publish('viewer/togglePane', {
-                    pane: paneID,
-                    show: 'block'
-                });
-            }
+        destroy: function () {
+            this.clearAll();
+            this.removeGraphicLayers();
+            this.inherited(arguments);
         },
 
-        mixinDeep: function(dest, source) {
+        mixinDeep: function (dest, source) {
             //Recursively mix the properties of two objects
             var empty = {};
             for (var name in source) {
-              if (!(name in dest) || (dest[name] !== source[name] && (!(name in empty) || empty[name] !== source[name]))) {
-                   try {
-                        if ( source[name].constructor==Object ) {
-                             dest[name] = this.mixinDeep(dest[name], source[name]);
+                if (!(name in dest) || (dest[name] !== source[name] && (!(name in empty) || empty[name] !== source[name]))) {
+                    try {
+                        if (source[name].constructor === Object) {
+                            dest[name] = this.mixinDeep(dest[name], source[name]);
                         } else {
-                             dest[name] = source[name];
+                            dest[name] = source[name];
                         }
-                   } catch(e) {
+                    } catch (e) {
                         // Property in destination object not set. Create it and set its value.
                         dest[name] = source[name];
-                   }
-              }
+                    }
+                }
             }
             return dest;
         }

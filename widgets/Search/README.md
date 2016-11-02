@@ -1,5 +1,5 @@
 #Search Widget for CMV
-Used in conjunction with the [Attribute Table](https://github.com/tmcgee/cmv-widgets#attributes-tables) widget to provide a user interface for querying feature layers, tables and related records.
+Used in conjunction with the [Attributes Table](https://github.com/tmcgee/cmv-widgets#attributes-tables) widget to provide a user interface for querying feature layers, dynamic layers, tables and related records using QueryTask and FindTask.
 
 ---
 ## Example Configuration:
@@ -39,6 +39,161 @@ define([
         map: true,
         mapClickMode: true,
 
+        /*
+           Show button to open the Query Builder widget
+           This new widget not yet been released
+        */
+        enableQueryBuilder: false,
+
+        /*
+            continue adding multiple shapes before searching
+        */
+        enableDrawMultipleShapes: true,
+
+        /*
+            add the results of a search to the existing results from a previous search
+        */
+        enableAddToExistingResults: true,
+
+        /*
+            use spatial filters in searches by attribute
+        */
+        enableSpatialFilters: true,
+
+        /*
+            control which spatial filters are available
+        */
+        spatialFilters: {
+            entireMap: true,
+            currentExtent: true,
+            identifiedFeature: true,
+            searchFeatures: true,
+            searchSelected: true,
+            searchSource: true,
+            searchBuffer: true
+        },
+
+        /*
+            Control which drawing tools are available to the user
+        */
+        drawingOptions: {
+            rectangle: true,
+            circle: true,
+            point: true,
+            polyline: true,
+            freehandPolyline: true,
+            polygon: true,
+            freehandPolygon: true,
+            stopDrawing: true,
+            identifiedFeature: true,
+            selectedFeatures: true,
+
+            // change the symbology for drawn shapes and buffer around them
+            symbols: {}
+        },
+
+        /*
+            Override the options used for searching from the URL query string.
+        */
+        queryStringOptions: {
+            // what parameter is used to pass the layer index
+            layerParameter: 'layer',
+
+            // what parameter is used to pass the attribute search index
+            searchParameter: 'search',
+
+            // what parameter is used to pass the values to be searched
+            valueParameter: 'values',
+
+            // if passing multiple values, how are they delimited
+            valueDelimiter: '|',
+
+            // Should the widget open when the search is executed?
+            openWidget: true
+        },
+
+        /*
+            Symbology for drawn shapes
+        */
+        symbols: {
+            point: {
+                type: 'esriSMS',
+                style: 'esriSMSCircle',
+                size: 6,
+                color: [0, 0, 0, 64],
+                angle: 0,
+                xoffset: 0,
+                yoffset: 0,
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSSolid',
+                    color: [255, 0, 0],
+                    width: 2
+                }
+            },
+            polyline: {
+                type: 'esriSLS',
+                style: 'esriSLSSolid',
+                color: [255, 0, 0],
+                width: 2
+            },
+            polygon: {
+                type: 'esriSFS',
+                style: 'esriSFSSolid',
+                color: [0, 0, 0, 64],
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSSolid',
+                    color: [255, 0, 0],
+                    width: 1
+                }
+            },
+
+            // symbology for buffer around shapes
+            buffer: {
+                type: 'esriSFS',
+                style: 'esriSFSSolid',
+                color: [255, 0, 0, 32],
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSDash',
+                    color: [255, 0, 0, 255],
+                    width: 1
+                }
+            }
+        },
+
+        /*
+            Override the units available for the buffer tool.
+        */
+        bufferUnits: [
+            {
+                value: GeometryService.UNIT_FOOT,
+                label: 'Feet',
+                selected: true
+            },
+            {
+                value: GeometryService.UNIT_STATUTE_MILE,
+                label: 'Miles'
+            },
+            {
+                value: GeometryService.UNIT_METER,
+                label: 'Meters'
+            },
+            {
+                value: GeometryService.UNIT_KILOMETER,
+                label: 'Kilometers'
+            },
+            {
+                value: GeometryService.UNIT_NAUTICAL_MILE,
+                label: 'Nautical Miles'
+            },
+            {
+                value: GeometryService.UNIT_US_NAUTICAL_MILE,
+                label: 'US Nautical Miles'
+            }
+        ],
+
         layers: [
             {
                 name: 'Damage Assessment',
@@ -66,8 +221,7 @@ define([
                                 name: 'Type of Damage',
                                 label: 'Type of Damage',
                                 expression: '(typdamage LIKE \'[value]%\')',
-                                placeholder: 'Enter the text Destroyed, Major or Minor',
-                                minChars: 3
+                                values: ['*', 'Destroyed', 'Major', 'Minor']
                             }
                         ],
 
@@ -242,12 +396,10 @@ define([
                         name: 'Search For Police Station By Name',
                         searchFields: [
                             {
-                                name: 'Police Station',
-                                label: 'Name',
-                                expression: '(PDNAME LIKE \'[value]%\')',
-                                placeholder: 'Enter the Name of the Police Station',
-                                required: true,
-                                minChars: 3
+                                name: 'PDNAME',
+                                label: 'Station Name',
+                                expression: '(PDNAME = \'[value]\')',
+                                unique: true
                             }
                         ],
 
@@ -294,6 +446,66 @@ define([
                         }
                     }
                 ]
+            },
+            {
+                name: 'Public Safety by Name',
+                findOptions: {
+                    url: 'http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/PublicSafety/PublicSafetyOperationalLayers/MapServer',
+                    layerIds: [1, 2, 3, 4, 5, 6, 7],
+                    searchFields: ['FDNAME, PDNAME', 'NAME', 'RESNAME']
+                },
+                attributeSearches: [
+                    {
+                        name: 'Search for Public Safety Locations By Name',
+                        searchFields: [
+                            {
+                                name: 'Name',
+                                label: 'Name',
+                                expression: '[value]%\')',
+                                placeholder: 'fdname, pdname, name or resname',
+                                required: true,
+                                minChars: 3
+                            }
+                        ],
+
+                        title: 'Public Safety Locations',
+                        topicID: 'findPublicSafterQuery',
+                        gridOptions: {
+                            columns: [
+                                {
+                                    field: 'value',
+                                    label: 'Name'
+                                },
+                                {
+                                    field: 'displayFieldName',
+                                    label: 'Field',
+                                    width: 150
+                                },
+                                {
+                                    field: 'layerName',
+                                    label: 'Layer',
+                                    width: 150
+                                },
+                                {
+                                    field: 'Last Update Date',
+                                    label: 'Last Updated',
+                                    width: 150,
+                                    get: function (object) { // allow export as a proper date
+                                        return new Date(object['Last Update Date']);
+                                    },
+                                    formatter: formatDate
+
+                                }
+                            ],
+                            sort: [
+                                {
+                                    attribute: 'Name',
+                                    descending: false
+                                }
+                            ]
+                        }
+                    }
+                ]
             }
         ]
     };
@@ -302,3 +514,46 @@ define([
 
 ## Screenshot:
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/search2.jpg)
+
+---
+##Search Topics
+
+### Subscribed Topics
+The Search widget subscribes to the following topics. The topicID should be unique for each instance of the widget.
+``` javascript
+// execute a basic search  (incomplete and untested)
+topicID + '/search'
+
+// execute a query
+topicID + '/executeQuery'
+
+//  update the available spatial filters when the table (tab) is updated
+this.attributesContainerID + '/tableUpdated'
+
+// set the sql where clause for the current attributes search
+this.topicID + '/setSQLWhereClause'
+
+this.topicID + '/clearSQLWhereClause'
+
+// listens for the mapClickMode changing
+'mapClickMode/currentSet'
+```
+
+### Published Topics
+The Search widdet publishes the following topics. The topicID should be unique for each instance of the widget.
+```javascript
+// publishes to Growl widget to provide users with information such as when a query is executing or details about the query results (number of results)
+'growler/growl'
+
+// publish a change in mapClickMode
+'mapClickMode/setCurrent'
+
+// return the  mapClickMode to the default
+'mapClickMode/setDefault'
+
+// publish to an accompanying attributes table and running the submitted query or find task.
+this.attributesContainerID + '/addTable'
+
+// opens the QueryBuilder widget
+this.queryBuilderTopicID + '/openDialog'
+```

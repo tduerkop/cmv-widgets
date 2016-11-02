@@ -1,18 +1,37 @@
+/*eslint strict: 0, no-loop-func: 0  */
 define([
     'dojo/_base/declare',
     'dijit/_WidgetBase',
     'dijit/_TemplatedMixin',
     'dijit/_WidgetsInTemplateMixin',
 
-    'esri/toolbars/draw',
-    'esri/tasks/query',
-    'esri/tasks/GeometryService',
     'dojo/_base/lang',
     'dojo/on',
     'dojo/dom-style',
     'dojo/aspect',
     'dojo/topic',
     'dojo/keys',
+    'dojo/_base/array',
+    'dojo/dom',
+    'dojo/dom-construct',
+    'dijit/registry',
+    'dojo/io-query',
+
+    'dijit/form/Select',
+    'dijit/form/TextBox',
+
+    'esri/toolbars/draw',
+    'esri/tasks/query',
+    'esri/tasks/GeometryService',
+    'esri/geometry/geometryEngine',
+
+    'esri/layers/GraphicsLayer',
+    'esri/graphic',
+    'esri/symbols/SimpleMarkerSymbol',
+    'esri/symbols/SimpleLineSymbol',
+    'esri/symbols/SimpleFillSymbol',
+
+    './Search/GetDistinctValues',
 
     // template
     'dojo/text!./Search/templates/Search.html',
@@ -29,6 +48,7 @@ define([
     'dijit/form/NumberTextBox',
     'dijit/form/Button',
     'dijit/form/CheckBox',
+    'dijit/form/ToggleButton',
 
     // css
     'xstyle/css!./Search/css/Search.css',
@@ -40,15 +60,32 @@ define([
     _TemplatedMixin,
     _WidgetsInTemplateMixin,
 
-    Draw,
-    Query,
-    GeometryService,
     lang,
     on,
     domStyle,
     aspect,
     topic,
     keys,
+    arrayUtil,
+    dom,
+    domConstruct,
+    registry,
+    ioQuery,
+
+    Select,
+    TextBox,
+
+    Draw,
+    Query,
+    GeometryService,
+    geometryEngine,
+    GraphicsLayer,
+    Graphic,
+    SimpleMarkerSymbol,
+    SimpleLineSymbol,
+    SimpleFillSymbol,
+
+    GetDistinctValues,
 
     template,
 
@@ -63,11 +100,13 @@ define([
         mapClickMode: null,
 
         // i18n
-        i18n: i18n,
+        defaultI18n: i18n,
+        i18n: {},
 
         title: 'Search Results',
         topicID: 'searchResults',
         attributesContainerID: 'attributesContainer',
+        queryBuilderTopicID: 'queryBuilderWidget',
 
         shapeLayer: 0,
         attributeLayer: 0,
@@ -83,6 +122,32 @@ define([
         */
         hiddenTabs: [],
 
+        // collects the geometry from multiple shapes for use in the search
+        spatialGeometry: null,
+
+        // the current tab/table of search results
+        selectedTable: null,
+
+        /*
+            Search capabilities that can be enabled/disabled
+            individually in the configuration file.
+        */
+        enableQueryBuilder: false, //Query Builder widget not yet released
+        enableDrawMultipleShapes: true,
+        enableAddToExistingResults: true,
+        enableSpatialFilters: true,
+
+        // configure which spatial filters are available
+        spatialFilters: {
+            entireMap: true,
+            currentExtent: true,
+            identifiedFeature: true,
+            searchFeatures: true,
+            searchSelected: true,
+            searchSource: true,
+            searchBuffer: true
+        },
+
         drawingOptions: {
             rectangle: true,
             circle: true,
@@ -91,8 +156,77 @@ define([
             freehandPolyline: true,
             polygon: true,
             freehandPolygon: true,
+            stopDrawing: true,
             identifiedFeature: true,
-            selectedFeatures: false
+            selectedFeatures: true,
+
+            symbols: {}
+        },
+
+        defaultQueryStringOptions: {
+            // what parameter is used to pass the layer index
+            layerParameter: 'layer',
+
+            // what parameter is used to pass the attribute search index
+            searchParameter: 'search',
+
+            // what parameter is used to pass the values to be searched
+            valueParameter: 'values',
+
+            // if passing multiple values, how are they delimited
+            valueDelimiter: '|',
+
+            // Should the widget open when the search is executed?
+            openWidget: true
+        },
+
+        // symbology for drawn shapes
+        defaultSymbols: {
+            point: {
+                type: 'esriSMS',
+                style: 'esriSMSCircle',
+                size: 6,
+                color: [0, 0, 0, 64],
+                angle: 0,
+                xoffset: 0,
+                yoffset: 0,
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSSolid',
+                    color: [255, 0, 0],
+                    width: 2
+                }
+            },
+            polyline: {
+                type: 'esriSLS',
+                style: 'esriSLSSolid',
+                color: [255, 0, 0],
+                width: 2
+            },
+            polygon: {
+                type: 'esriSFS',
+                style: 'esriSFSSolid',
+                color: [0, 0, 0, 64],
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSSolid',
+                    color: [255, 0, 0],
+                    width: 1
+                }
+            },
+
+            // symbology for buffer around shapes
+            buffer: {
+                type: 'esriSFS',
+                style: 'esriSFSSolid',
+                color: [255, 0, 0, 32],
+                outline: {
+                    type: 'esriSLS',
+                    style: 'esriSLSDash',
+                    color: [255, 0, 0, 255],
+                    width: 1
+                }
+            }
         },
 
         bufferUnits: [
@@ -123,13 +257,24 @@ define([
             }
         ],
 
+        postMixInProperties: function () {
+            this.inherited(arguments);
+            this.i18n = this.mixinDeep(this.defaultI18n, this.i18n);
+        },
 
         postCreate: function () {
             this.inherited(arguments);
+            this.initAdvancedFeatures();
             this.initLayerSelect();
+            this.initSpatialFilters();
             this.selectBufferUnits.set('options', this.bufferUnits);
             this.drawToolbar = new Draw(this.map);
             this.enableDrawingButtons();
+            this.addGraphicsLayer();
+
+            this.tabContainer.watch('selectedChildWidget', lang.hitch(this, function () {
+                this.stopDrawing();
+            }));
 
             if (this.map.infoWindow) {
                 on(this.map.infoWindow, 'show', lang.hitch(this, 'enableIdentifyButton'));
@@ -137,18 +282,18 @@ define([
             }
             this.own(on(this.drawToolbar, 'draw-end', lang.hitch(this, 'endDrawing')));
 
-            for (var k = 0; k < 5; k++) {
-                this.own(on(this['inputSearchTerm' + k], 'keyup', lang.hitch(this, 'executeSearchWithReturn')));
-            }
             this.addTopics();
         },
 
         startup: function () {
             this.inherited(arguments);
+
+            this.buildSearchControls();
+
             var parent = this.getParent();
             if (parent) {
                 this.own(on(parent, 'show', lang.hitch(this, function () {
-                  this.tabContainer.resize();
+                    this.tabContainer.resize();
                 })));
             }
             aspect.after(this, 'resize', lang.hitch(this, function () {
@@ -169,11 +314,19 @@ define([
                 domStyle.set(tab.domNode, 'display', 'none');
                 domStyle.set(tab.controlButton.domNode, 'display', 'none');
             }
+
+            // Search from the applications query string
+            this.checkQueryString();
         },
 
         addTopics: function () {
             this.own(topic.subscribe('mapClickMode/currentSet', lang.hitch(this, 'setMapClickMode')));
-            this.own(topic.subscribe('searchWidget/search', lang.hitch(this, 'executeSearch')));
+            this.own(topic.subscribe(this.topicID + '/search', lang.hitch(this, 'executeSearch')));
+            this.own(topic.subscribe(this.attributesContainerID + '/tableUpdated', lang.hitch(this, 'setSearchTable')));
+
+            // used with QueryBuilder widget
+            this.own(topic.subscribe(this.topicID + '/setSQLWhereClause', lang.hitch(this, 'setSQLWhereClause')));
+            this.own(topic.subscribe(this.topicID + '/clearSQLWhereClause', lang.hitch(this, 'clearSQLWhereClause')));
         },
 
         /*******************************
@@ -182,7 +335,7 @@ define([
 
         executeSearchWithReturn: function (evt) {
             if (evt.keyCode === keys.ENTER) {
-                this.onSearch();
+                this.doAttributeSearch();
             }
         },
 
@@ -194,10 +347,43 @@ define([
                 return;
             }
 
-            var distance, unit, showOnly = false;
             var layer = this.layers[layerIndex];
-            var where = layer.expression || '';
             var search = layer.attributeSearches[this.searchIndex] || {};
+            var searchOptions = {
+                title: search.title || layer.title || this.title,
+                topicID: search.topicID || layer.topicID || this.topicID,
+                findOptions: null,
+                queryOptions: null,
+                gridOptions: lang.clone(search.gridOptions || layer.gridOptions || {}),
+                featureOptions: lang.clone(search.featureOptions || layer.featureOptions || {}),
+                symbolOptions: lang.clone(search.symbolOptions || layer.symbolOptions || {}),
+                toolbarOptions: lang.clone(search.toolbarOptions || layer.toolbarOptions || {}),
+                infoTemplate: search.infoTemplate || layer.infoTemplate
+            };
+
+            if (layer.findOptions) { // It is a FindTask
+                searchOptions.findOptions = this.buildFindOptions(layer, search);
+            } else {
+                searchOptions.queryOptions = this.buildQueryOptions(layer, search, geometry);
+            }
+
+            this.hideInfoWindow();
+
+            // publish to an accompanying attributed table
+            if (searchOptions.findOptions || searchOptions.queryOptions) {
+                topic.publish(this.attributesContainerID + '/addTable', searchOptions);
+            }
+
+        },
+
+        buildQueryOptions: function (layer, search, geometry) {
+            var where, distance, unit, showOnly = false, addToExisting = false;
+            var queryOptions = {
+                idProperty: search.idProperty || layer.idProperty || 'FID',
+                linkField: search.linkField || layer.linkField || null,
+                linkedQuery: lang.clone(search.linkedQuery || layer.linkedQuery || null)
+            };
+
             if (geometry) {
                 distance = this.inputBufferDistance.get('value');
                 if (isNaN(distance)) {
@@ -207,44 +393,27 @@ define([
                         level: 'error',
                         timeout: 3000
                     });
-                    return;
+                    return null;
                 }
                 unit = this.selectBufferUnits.get('value');
                 showOnly = this.checkBufferOnly.get('checked');
+                addToExisting = this.checkSpatialAddToExisting.get('checked');
 
             } else {
-                var fields = search.searchFields;
-                var len = fields.length;
-                for (var k = 0; k < len; k++) {
-                    var field = fields[k];
-                    var searchTerm = this.getSearchTerm(k, field);
-                    if (searchTerm === null) {
-                        return;
-                    } else if (searchTerm.length > 0 && field.expression) {
-                        var attrWhere = field.expression;
-                        attrWhere = attrWhere.replace(/\[value\]/g, searchTerm);
-                        if (!attrWhere) {
-                            break;
-                        }
-                        if (where !== '') {
-                            where += ' AND ';
-                        }
-                        where += attrWhere;
-                    }
+                where = this.buildWhereClause(layer, search);
+                if (where === null) {
+                    return null;
                 }
+                geometry = this.getSpatialFilterGeometry();
+                addToExisting = this.checkAttributeAddToExisting.get('checked');
             }
-
-            var queryOptions = {
-                idProperty: search.idProperty || layer.idProperty || 'FID',
-                linkField: search.linkField || layer.linkField || null,
-                linkedQuery: lang.clone(search.linkedQuery || layer.linkedQuery || null)
-            };
 
             var queryParameters = lang.clone(search.queryParameters || layer.queryParameters || {});
             queryOptions.queryParameters = lang.mixin(queryParameters, {
                 //type: search.type || layer.type || 'spatial',
                 geometry: geometry,
                 where: where,
+                addToExisting: addToExisting,
                 outSpatialReference: search.outSpatialReference || this.map.spatialReference,
                 spatialRelationship: search.spatialRelationship || layer.spatialRelationship || Query.SPATIAL_REL_INTERSECTS
             });
@@ -256,23 +425,129 @@ define([
                 showOnly: showOnly
             });
 
-            // publish to an accompanying attributed table
-            topic.publish(this.attributesContainerID + '/addTable', {
-                title: search.title || layer.title || this.title,
-                topicID: search.topicID || layer.topicID || this.topicID,
-                queryOptions: queryOptions,
-                gridOptions: lang.clone(search.gridOptions || layer.gridOptions || {}),
-                featureOptions: lang.clone(search.featureOptions || layer.featureOptions || {}),
-                symbolOptions: lang.clone(search.symbolOptions || layer.symbolOptions || {}),
-                toolbarOptions: lang.clone(search.toolbarOptions || layer.toolbarOptions || {}),
-                infoTemplate: search.infoTemplate || layer.infoTemplate
+            return queryOptions;
+
+        },
+
+        buildFindOptions: function (layer, search) {
+            var searchTerm = null;
+            if (search.searchFields.length > 0) {
+                var inputId = search.inputIds[0];
+                var input = registry.byId(inputId);
+                searchTerm = this.getSearchTerm(input, search.searchFields[0]);
+                if (searchTerm === null) {
+                    return null;
+                }
+            }
+            return lang.mixin(layer.findOptions, {
+                searchText: searchTerm,
+                contains: !this.containsSearchText.checked,
+                outSpatialReference: search.outSpatialReference || this.map.spatialReference
             });
         },
 
-        getSearchTerm: function (idx, field) {
-            var searchTerm = this['inputSearchTerm' + idx].get('value');
+        buildWhereClause: function (layer, search) {
+            var where = layer.expression || '';
+            var fields = search.searchFields;
+            var searchTerm = null;
+
+            var len = fields.length;
+            for (var k = 0; k < len; k++) {
+                var field = fields[k];
+                var inputId = search.inputIds[k];
+                var input = registry.byId(inputId);
+                searchTerm = this.getSearchTerm(input, field);
+                if (searchTerm === null) {
+                    return null;
+                } else if (searchTerm.length > 0 && field.expression) {
+                    var attrWhere = field.expression;
+                    attrWhere = attrWhere.replace(/\[value\]/g, searchTerm);
+                    if (!attrWhere) {
+                        break;
+                    }
+                    if (where !== '') {
+                        where += ' AND ';
+                    }
+                    where += attrWhere;
+                }
+            }
+            return where;
+        },
+
+        getSpatialFilterGeometry: function () {
+            var geometry = null, type = this.selectAttributeSpatialFilter.get('value');
+
+            switch (type) {
+            case 'entireMap':
+                break;
+            case 'currentExtent':
+                geometry = this.map.extent;
+                break;
+            case 'identifiedFeatures':
+                geometry = this.getGeometryFromIdentifiedFeature();
+                break;
+            case 'searchSource':
+                if (this.selectedTable) {
+                    geometry = this.getGeometryFromGraphicsLayer(this.selectedTable.sourceGraphics);
+                }
+                break;
+            case 'searchFeatures':
+                if (this.selectedTable) {
+                    geometry = this.getGeometryFromGraphicsLayer(this.selectedTable.featureGraphics);
+                }
+                break;
+            case 'searchSelected':
+                if (this.selectedTable) {
+                    geometry = this.getGeometryFromSelectedFeatures();
+                }
+                break;
+            case 'searchBuffer':
+                if (this.selectedTable) {
+                    geometry = this.getGeometryFromGraphicsLayer(this.selectedTable.bufferGraphics);
+                }
+                break;
+            default:
+                break;
+            }
+
+            return geometry;
+        },
+
+        getGeometryFromGraphicsLayer: function (layer) {
+            if (!layer || !layer.graphics) {
+                return null;
+            }
+
+            var graphics = layer.graphics;
+            var k = 0, len = graphics.length, geoms = [];
+            for (k = 0; k < len; k++) {
+                geoms.push(graphics[k].geometry);
+            }
+            return geometryEngine.union(geoms);
+        },
+
+        getGeometryFromIdentifiedFeature: function () {
+            var popup = this.map.infoWindow, feature;
+            if (popup && popup.isShowing) {
+                feature = popup.getSelectedFeature();
+            }
+            return feature.geometry;
+        },
+
+        getGeometryFromSelectedFeatures: function () {
+            var geom;
+            if (this.selectedTable) {
+                geom = this.getGeometryFromGraphicsLayer(this.selectedTable.selectedGraphics);
+            }
+            return geom;
+        },
+
+        getSearchTerm: function (input, field) {
+            //var searchTerm = this['inputSearchTerm' + idx].get('value');
+            var searchTerm = input.get('value');
             if (!searchTerm && field.required) {
-                this['inputSearchTerm' + idx].domNode.focus();
+                //this['inputSearchTerm' + idx].domNode.focus();
+                input.domNode.focus();
 
                 topic.publish('growler/growl', {
                     title: 'Search',
@@ -284,6 +559,7 @@ define([
             }
             if (field.minChars && field.required) {
                 if (searchTerm.length < field.minChars) {
+                    input.domNode.focus();
                     topic.publish('growler/growl', {
                         title: 'Search',
                         message: 'Search term for ' + field.name + ' must be at least ' + field.minChars + ' characters.',
@@ -293,27 +569,225 @@ define([
                     return null;
                 }
             }
+            if (searchTerm === '*' || searchTerm === null) {
+                searchTerm = '';
+            }
             return searchTerm;
         },
 
         // a topic subscription to listen for published topics
+        // also used to search from the queryString
         executeSearch: function (options) {
-            if (options.searchTerm) {
-                this.inputSearchTerm0.set('value', options.searchTerm);
-            }
             if (options.bufferDistance) {
                 this.inputBufferDistance.set('value', options.bufferDistance);
                 if (options.bufferUnits) {
                     this.selectBufferUnits.set('value', options.bufferUnits);
                 }
             }
-            this.search(options.geometry, options.layerIndex);
+
+            //attribute search
+            var doAttrSearch = false;
+            if (options.searchTerm) {
+                var inputId, input;
+                var layer = this.layers[options.layerIndex];
+                if (layer) {
+                    this.attributeLayer = options.layerIndex;
+                    this.onAttributeLayerChange(this.attributeLayer);
+                    var search = layer.attributeSearches[options.searchIndex];
+                    if (search) {
+                        this.onAttributeQueryChange(options.searchIndex);
+                        if (lang.isArray(options.searchTerm)) {
+                            var len = options.searchTerm.length;
+                            for (var k = 0; k < len; k++) {
+                                inputId = search.inputIds[k];
+                                if (inputId) {
+                                    input = registry.byId(inputId);
+                                    if (input) {
+                                        input.set('value', options.searchTerm[k]);
+                                        doAttrSearch = true;
+                                    }
+                                }
+                            }
+                        } else {
+                            inputId = search.inputIds[0];
+                            input = registry.byId(inputId);
+                            if (input) {
+                                input.set('value', options.searchTerm);
+                                doAttrSearch = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if (options.geometry || doAttrSearch) {
+                this.search(options.geometry, options.layerIndex);
+            }
         },
 
+        checkQueryString: function () {
+            // searching by geometry from the query string is not yet supported
+            var options = this.mixinDeep(this.defaultQueryStringOptions, this.queryStringOptions || {});
+            var uri = window.location.href;
+            var qs = uri.substring(uri.indexOf('?') + 1, uri.length);
+            var qsObj = ioQuery.queryToObject(qs);
+            var value = qsObj[options.valueParameter];
+            var layerIndex = qsObj[options.layerParameter] || 0;
+            var searchIndex = qsObj[options.searchParameter] || 0;
+            var widget;
+
+            // only continue if there is a term to search
+            if (!value) {
+                return;
+            }
+            if (value.indexOf(options.valueDelimiter) > -1) {
+                value = value.split(options.valueDelimiter);
+            }
+
+            if (options.openWidget) {
+                widget = this.parentWidget;
+                if (widget && widget.toggleable) {
+                    if (!widget.open) {
+                        widget.toggle();
+                    }
+                }
+            }
+
+            // make sure the attributesTable widget is loaded before executing
+            // check every 0.25 seconds
+            var qsTimer = window.setInterval(lang.hitch(this, function () {
+                widget = registry.byId(this.attributesContainerID + '_widget');
+                if (widget) {
+                    // no need to continue, so clear the timer
+                    window.clearInterval(qsTimer);
+
+                    // we're ready so execute the search.
+                    this.executeSearch({
+                        layerIndex: layerIndex,
+                        searchIndex: searchIndex,
+                        searchTerm: value
+                    });
+                }
+            }), 250);
+
+            // clear the timer after 30 seconds in case we are waiting that long
+            window.setTimeout(function () {
+                window.clearInterval(qsTimer);
+            }, 30000);
+        },
 
         /*******************************
         *  Form/Field Functions
         *******************************/
+
+        // Initialize the controls used for the search.
+        buildSearchControls: function () {
+            // change to
+            var domNode = this.divAttributeQueryFields;
+            if (domNode) {
+                for (var i = 0; i < this.layers.length; i++) {
+                    var layer = this.layers[i];
+                    if (layer) {
+                        var searches = layer.attributeSearches;
+                        if (searches) {
+                            for (var j = 0; j < searches.length; j++) {
+                                var search = searches[j];
+                                if (search) {
+                                    // add the div for the search
+                                    var id = '_' + i.toString() + '_' + j.toString();
+                                    var divName = 'divSearch' + id;
+                                    var divNode = domConstruct.create('div', {
+                                        id: divName,
+                                        style: {
+                                            display: 'none'
+                                        }
+                                    }, domNode, 'last');
+                                    // display the first search
+                                    if ((i === 0) && (j === 0)) {
+                                        domStyle.set(divName, 'display', 'block');
+                                    }
+                                    search.divName = divName;
+                                    search.inputIds = [];
+
+                                    // add the controls for the search
+                                    for (var k = 0; k < search.searchFields.length; k++) {
+                                        this.buildSearchControl(search, layer, divNode, id, i, j, k);
+                                    }
+                                    //this.initialized = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        buildSearchControl: function (search, layer, divNode, id, i, j, k) {
+            var field = search.searchFields[k];
+            var options = [], input = null;
+            if (field) {
+                var txt = field.label + ':';
+                if (field.minChars) {
+                    txt += ' (at least ' + field.minChars + ' chars)';
+                }
+                domConstruct.create('label', {
+                    innerHTML: txt
+                }, divNode, 'last');
+
+                var inputId = 'inputSearch_' + id + '_' + k.toString();
+                if (field.unique) {
+                    options = [];
+                    input = new Select({
+                        id: inputId,
+                        options: options,
+                        style: {
+                            width: '100%'
+                        }
+                    });
+                    // should actually only do this for the first control
+                    if ((i === 0) && (j === 0)) {
+                        this.getDistinctValues(inputId, layer.queryParameters, field.name, field.includeBlankValue);
+                    }
+                } else if (field.values) {
+                    options = [];
+                    arrayUtil.forEach(field.values, function (item) {
+                        options.push({
+                            label: item,
+                            value: item,
+                            selected: false
+                        });
+                    });
+                    if (options.length > 0) {
+                        options[0].selected = true;
+                    }
+                    input = new Select({
+                        id: inputId,
+                        options: options,
+                        style: {
+                            width: '100%'
+                        }
+                    });
+                } else {
+                    input = new TextBox({
+                        id: inputId,
+                        type: 'text',
+                        style: {
+                            width: '100%'
+                        }
+                    });
+                    input.set('value', '');
+                    input.set('placeHolder', field.placeholder);
+                }
+
+                if (input) {
+                    input.placeAt(divNode, 'last');
+                    this.own(on(input, 'keyup', lang.hitch(this, 'executeSearchWithReturn')));
+                }
+
+                // the first input field is for focus
+                search.inputIds.push(inputId);
+            }
+
+        },
 
         initLayerSelect: function () {
             var attrOptions = [],
@@ -343,6 +817,33 @@ define([
                 this.onShapeLayerChange(this.shapeLayer);
             } else {
                 this.selectLayerByShape.set('disabled', true);
+            }
+        },
+
+        initAdvancedFeatures: function () {
+            // show the queryBuilder button
+            if (this.enableQueryBuilder) {
+                this.btnQueryBuilder.set('disabled', false);
+            } else {
+                domStyle.set(this.btnQueryBuilder.domNode, 'display', 'none');
+            }
+
+            // allow or not the drawing multiple shapes before searching
+            if (!this.enableDrawMultipleShapes) {
+                domStyle.set(this.btnSpatialSearch.domNode, 'display', 'none');
+                this.drawingOptions.stopDrawing = false;
+            }
+
+            // allow or the search results to be added to the previous results
+            if (!this.enableAddToExistingResults) {
+                domStyle.set(this.divAttributeAddToExisting, 'display', 'none');
+                domStyle.set(this.divSpatialAddToExisting, 'display', 'none');
+                this.drawingOptions.selectedFeatures = false;
+            }
+
+            // allow or not the use of spatial features
+            if (!this.enableSpatialFilters) {
+                domStyle.set(this.divAttributeSpatialFilter, 'display', 'none');
             }
         },
 
@@ -382,54 +883,160 @@ define([
         },
 
         onAttributeQueryChange: function (newValue) {
-            this.searchIndex = newValue;
-            var layer = this.layers[this.attributeLayer];
-            if (layer) {
-                var searches = layer.attributeSearches;
-                if (searches) {
-                    var search = searches[newValue];
-                    if (search) {
-                        // initialize all the search field inputs
-                        var fields = search.searchFields;
-                        for (var k = 0; k < 10; k++) {
-                            var display = 'block', disabled = false;
-                            var formLabel = this['labelSearchTerm' + k];
-                            var formInput = this['inputSearchTerm' + k];
-                            if (formInput) {
-                                var field = fields[k];
-                                if (field) {
-                                    var txt = field.label + ':';
-                                    if (field.minChars) {
-                                        txt += ' (at least ' + field.minChars + ' chars)';
-                                    }
-
-                                    formLabel.textContent = txt;
-                                    formInput.set('value', '');
-                                    formInput.set('placeHolder', field.placeholder);
-                                } else {
-                                    display = 'none';
-                                    disabled = true;
+            // 'none' all of the query divs
+            var domNode = this.divAttributeQueryFields,
+                searches, search, layer, divNode;
+            if (domNode) {
+                for (var i = 0; i < this.layers.length; i++) {
+                    layer = this.layers[i];
+                    if (layer) {
+                        searches = layer.attributeSearches;
+                        if (searches) {
+                            for (var j = 0; j < searches.length; j++) {
+                                search = searches[j];
+                                divNode = dom.byId(search.divName);
+                                if (divNode) {
+                                    domStyle.set(search.divName, 'display', 'none');
                                 }
-
-                                formInput.set('disabled', disabled);
-                                domStyle.set(formInput.domNode, 'display', display);
-                                domStyle.set(formLabel, 'display', display);
                             }
-
                         }
+                    }
+                }
+            }
+
+            // 'block' the query div and set the focus to the first widget
+            this.searchIndex = newValue;
+            layer = this.layers[this.attributeLayer];
+            if (layer) {
+                searches = layer.attributeSearches;
+                if (searches) {
+                    search = searches[newValue];
+                    if (search) {
+                        divNode = dom.byId(search.divName);
+                        if (!divNode) {
+                            return;
+                        }
+                        // refresh the controls if any require unique values
+                        for (var k = 0; k < search.searchFields.length; k++) {
+                            var field = search.searchFields[k];
+                            if (field.unique) {
+                                this.getDistinctValues(search.inputIds[k], layer.queryParameters, field.name, field.includeBlankValue);
+                            }
+                        }
+                        domStyle.set(search.divName, 'display', 'block');
+
+                        // only show "Contains" checkbox for FindTasks
+                        domStyle.set(this.queryContainsDom, 'display', ((layer.findOptions) ? 'block' : 'none'));
 
                         // put focus on the first input field
-                        this.inputSearchTerm0.domNode.focus();
-                        this.btnSearch.set('disabled', false);
+                        var input = registry.byId(search.inputIds[0]);
+                        if (input && input.domNode) {
+                            input.domNode.focus();
+                            this.btnAttributeSearch.set('disabled', false);
+                        }
                     }
                 }
             }
         },
 
-        onSearch: function () {
+        /*
+         * Retrieve the list of distinct values from ArcGIS Server using the ArcGIS API for JavaScript.
+         * @param {string} inputId The Dojo id of the control to populate with unique values.
+         * @param {object} queryParameters Used to get the operational layer's url to be queried for unique values.
+         * @param {string} fieldName The field name for which to retrieve unique values.
+         * @param {boolean} includeBlankValue Whether to add a blank (null) value to the resulting list.
+         */
+        getDistinctValues: function (inputId, queryParameters, fieldName, includeBlankValue) {
+            var url = this.getLayerURL(queryParameters);
+            if (url) {
+                var q = new GetDistinctValues(inputId, url, fieldName, includeBlankValue);
+                q.executeQuery();
+            }
+        },
+
+        getLayerURL: function (qp) {
+            var url = qp.url;
+            if (!url && qp.layerID) {
+                var layer = this.map.getLayer(qp.layerID);
+                if (layer) {
+                    if (layer.declaredClass === 'esri.layers.FeatureLayer') { // Feature Layer
+                        url = layer.url;
+                    } else if (layer.declaredClass === 'esri.layers.ArcGISDynamicMapServiceLayer') { // Dynamic Layer
+                        if (qp.sublayerID !== null) {
+                            url = layer.url + '/' + qp.sublayerID;
+                        } else if (layer.visibleLayers && layer.visibleLayers.length === 1) {
+                            url = layer.url + '/' + layer.visibleLayers[0];
+                        }
+                    }
+                }
+            }
+            return url;
+        },
+
+        doAttributeSearch: function () {
             this.search(null, this.attributeLayer);
         },
 
+        initSpatialFilters: function () {
+            var type = this.selectAttributeSpatialFilter.get('value');
+            var geomOptions = [], popup = this.map.infoWindow, includeOption;
+            for (var key in this.spatialFilters) {
+                if (this.spatialFilters.hasOwnProperty(key)) {
+                    if (this.spatialFilters[key]) {
+                        includeOption = false;
+                        switch (key) {
+                        case 'identifiedFeature':
+                            if (popup && popup.isShowing) {
+                                includeOption = true;
+                            }
+                            break;
+                        case 'searchSource':
+                            if (this.selectedTable && this.selectedTable.sourceGraphics.graphics.length > 0) {
+                                includeOption = true;
+                            }
+                            break;
+                        case 'searchFeatures':
+                            if (this.selectedTable && this.selectedTable.featureGraphics.graphics.length > 0) {
+                                includeOption = true;
+                            }
+                            break;
+                        case 'searchSelected':
+                            if (this.selectedTable && this.selectedTable.selectedGraphics.graphics.length > 0) {
+                                includeOption = true;
+                            }
+                            break;
+                        case 'searchBuffer':
+                            if (this.selectedTable && this.selectedTable.bufferGraphics.graphics.length > 0) {
+                                includeOption = true;
+                            }
+                            break;
+                        default:
+                            includeOption = true;
+                            break;
+                        }
+                        if (includeOption) {
+                            geomOptions.push({
+                                value: key,
+                                label: this.i18n.Labels.spatialFilters[key]
+                            });
+                        }
+                    }
+                }
+            }
+
+            this.selectAttributeSpatialFilter.set('options', geomOptions);
+            this.selectGeometry = null;
+            if (geomOptions.length > 0) {
+                this.selectAttributeSpatialFilter.set('disabled', false);
+                this.selectAttributeSpatialFilter.set('value', type);
+            } else {
+                this.selectAttributeSpatialFilter.set('disabled', true);
+            }
+        },
+
+        onSpatialBufferChange: function () {
+            this.addBufferGraphic();
+        },
 
         /*******************************
         *  Drawing Functions
@@ -451,7 +1058,9 @@ define([
             domStyle.set(this.searchPolygonButtonDijit.domNode, 'display', disp);
             disp = (opts.freehandPolygon !== false) ? 'inline-block' : 'none';
             domStyle.set(this.searchFreehandPolygonButtonDijit.domNode, 'display', disp);
-            disp = (opts.identifiedFeatures !== false) ? 'inline-block' : 'none';
+            disp = (opts.stopDrawing !== false) ? 'inline-block' : 'none';
+            domStyle.set(this.searchStopDrawingButtonDijit.domNode, 'display', disp);
+            disp = (opts.identifiedFeature !== false) ? 'inline-block' : 'none';
             domStyle.set(this.searchIdentifyButtonDijit.domNode, 'display', disp);
             disp = (opts.selectedFeatures !== false) ? 'inline-block' : 'none';
             domStyle.set(this.searchSelectedButtonDijit.domNode, 'display', disp);
@@ -525,29 +1134,120 @@ define([
             this.searchFreehandPolylineButtonDijit.set('checked', false);
             this.searchPolygonButtonDijit.set('checked', false);
             this.searchFreehandPolygonButtonDijit.set('checked', false);
+            this.searchStopDrawingButtonDijit.set('checked', true);
+            this.btnSpatialSearch.set('disabled', true);
         },
 
-        endDrawing: function(evt) {
-            var clickMode = this.mapClickMode;
-            this.uncheckDrawingTools();
-            this.map.enableMapNavigation();
-            this.drawToolbar.deactivate();
-            this.connectMapClick();
+        endDrawing: function (evt) {
+            var clickMode = this.mapClickMode, geometry;
+            if (clickMode === 'search' && evt) {
+                geometry = evt.geometry;
+            }
+            if (geometry) {
+                if (this.spatialGeometry) {
+                    this.spatialGeometry = geometryEngine.union(this.spatialGeometry, geometry);
+                } else {
+                    this.spatialGeometry = geometry;
+                }
+                this.addDrawingGraphic(evt);
+                this.addBufferGraphic();
 
-            if (clickMode === 'search') {
-                var geometry = evt.geometry;
-                if (geometry) {
-                    this.search(geometry, this.shapeLayer);
+                if (this.enableDrawMultipleShapes) {
+                    this.btnSpatialSearch.set('disabled', false);
+                } else {
+                    this.doSpatialSearch();
                 }
             }
+        },
+
+        stopDrawing: function () {
+            this.cancelDrawing();
+            this.connectMapClick();
         },
 
         cancelDrawing: function () {
             this.hideInfoWindow();
             this.disconnectMapClick();
             this.uncheckDrawingTools();
+            this.drawToolbar.deactivate();
+            this.spatialGeometry = null;
+            this.drawingGraphicsLayer.clear();
+            this.bufferGraphic = null;
         },
 
+        doSpatialSearch: function () {
+            this.uncheckDrawingTools();
+            this.map.enableMapNavigation();
+            this.drawToolbar.deactivate();
+            this.drawingGraphicsLayer.clear();
+            this.bufferGraphic = null;
+            this.connectMapClick();
+
+            if (this.spatialGeometry) {
+                this.search(this.spatialGeometry, this.shapeLayer);
+                this.spatialGeometry = null;
+            }
+        },
+
+        addGraphicsLayer: function () {
+            this.drawingGraphicsLayer = new GraphicsLayer({
+                id: this.topicID + '_SourceGraphics',
+                title: 'Search Drawing Graphics'
+            });
+            this.map.addLayer(this.drawingGraphicsLayer);
+
+            // symbology for drawn features
+            var symbolOptions = this.drawingOptions.symbols || {};
+            var symbols = this.mixinDeep(lang.clone(this.defaultSymbols), symbolOptions);
+            this.drawingPointSymbol = new SimpleMarkerSymbol(symbols.point);
+            this.drawingPolylineSymbol = new SimpleLineSymbol(symbols.polyline);
+            this.drawingPolygonSymbol = new SimpleFillSymbol(symbols.polygon);
+            this.bufferPolygonSymbol = new SimpleFillSymbol(symbols.buffer);
+        },
+
+        addDrawingGraphic: function (feature) {
+            var symbol, graphic;
+            switch (feature.geometry.type) {
+            case 'point':
+            case 'multipoint':
+                symbol = this.drawingPointSymbol;
+                break;
+            case 'polyline':
+                symbol = this.drawingPolylineSymbol;
+                break;
+            case 'extent':
+            case 'polygon':
+                symbol = this.drawingPolygonSymbol;
+                break;
+            default:
+            }
+            if (symbol) {
+                graphic = new Graphic(feature.geometry, symbol, feature.attributes);
+                this.drawingGraphicsLayer.add(graphic);
+            }
+        },
+
+        addBufferGraphic: function () {
+            var geometry,
+                distance = this.inputBufferDistance.get('value'),
+                unit = this.selectBufferUnits.get('value');
+
+            this.drawingGraphicsLayer.remove(this.bufferGraphic);
+            this.bufferGraphic = null;
+
+            if (isNaN(distance) || distance === 0 || !this.spatialGeometry) {
+                return;
+            }
+            if (this.map.spatialReference.wkid === 4326 || this.map.spatialReference.wkid === 102100) {
+                geometry = geometryEngine.geodesicBuffer(this.spatialGeometry, distance, unit);
+                if (geometry) {
+                    this.bufferGraphic = new Graphic(geometry, this.bufferPolygonSymbol);
+                    this.drawingGraphicsLayer.add(this.bufferGraphic);
+                }
+            }
+        },
+
+        /*
         onDrawToolbarDrawEnd: function (graphic) {
             this.map.enableMapNavigation();
             this.drawToolbar.deactivate();
@@ -555,21 +1255,19 @@ define([
 
             this.search(graphic.geometry, this.shapeLayer);
         },
+        */
 
         /*******************************
         *  Using Identify Functions
         *******************************/
 
         useIdentifiedFeatures: function () {
-            var popup = this.map.infoWindow;
-            if (popup && popup.isShowing) {
-                var feature = popup.getSelectedFeature();
-                if (feature) {
-                    popup.hide();
-                    this.search(feature.geometry, this.shapeLayer);
-                    return;
-                }
+            var geometry = this.getGeometryFromIdentifiedFeature();
+            if (geometry) {
+                this.search(geometry, this.shapeLayer);
+                return;
             }
+
             topic.publish('growler/growl', {
                 title: 'Search',
                 message: 'You must have identified a feature',
@@ -580,33 +1278,40 @@ define([
 
         enableIdentifyButton: function () {
             this.searchIdentifyButtonDijit.set('disabled', false);
+            this.initSpatialFilters();
         },
 
         disableIdentifyButton: function () {
             this.searchIdentifyButtonDijit.set('disabled', true);
+            this.initSpatialFilters();
         },
 
         /*******************************
         *  Using Selected Functions
         *******************************/
-        // not yet implemented - need a selection widget
+
         useSelectedFeatures: function () {
-            /*
-            var selected = false;
-            if (selected) {
-                var feature = this.getSelectedFeatures();
-                if (feature) {
-                    this.search(feature.geometry, this.shapeLayer);
-                    return;
-                }
+            var geometry = this.getGeometryFromSelectedFeatures();
+            if (geometry) {
+                this.search(geometry, this.shapeLayer);
+                return;
             }
-            */
+
             topic.publish('growler/growl', {
                 title: 'Search',
                 message: 'You must have selected feature(s)',
                 level: 'error',
                 timeout: 3000
             });
+        },
+
+        toggleSelectedButton: function () {
+            var geometry = this.getGeometryFromSelectedFeatures();
+            if (geometry) {
+                this.enableSelectedButton();
+            } else {
+                this.disableSelectedButton();
+            }
         },
 
         enableSelectedButton: function () {
@@ -618,8 +1323,31 @@ define([
         },
 
         /*******************************
+        *  Query Builder Functions
+        *******************************/
+
+        openQueryBuilder: function () {
+            var layer = this.layers[this.attributeLayer], search = layer.attributeSearches[this.searchIndex] || {};
+            topic.publish(this.queryBuilderTopicID + '/openDialog', {
+                layer: layer,
+                sqlText: search.sqlWhereClause
+            });
+        },
+
+        setSQLWhereClause: function (sqlText) {
+            var layer = this.layers[this.attributeLayer], search = layer.attributeSearches[this.searchIndex] || {};
+            search.sqlWhereClause = sqlText;
+        },
+
+        clearSQLWhereClause: function () {
+            var layer = this.layers[this.attributeLayer], search = layer.attributeSearches[this.searchIndex] || {};
+            search.sqlWhereClause = null;
+        },
+
+        /*******************************
         *  Miscellaneous Functions
         *******************************/
+
         hideInfoWindow: function () {
             if (this.map && this.map.infoWindow) {
                 this.map.infoWindow.hide();
@@ -644,6 +1372,32 @@ define([
                 this.drawToolbar.deactivate();
                 this.inherited(arguments);
             }
+        },
+
+        setSearchTable: function (searchTable) {
+            this.selectedTable = searchTable;
+            this.initSpatialFilters();
+            this.toggleSelectedButton();
+        },
+
+        mixinDeep: function (dest, source) {
+            //Recursively mix the properties of two objects
+            var empty = {};
+            for (var name in source) {
+                if (!(name in dest) || (dest[name] !== source[name] && (!(name in empty) || empty[name] !== source[name]))) {
+                    try {
+                        if (source[name].constructor === Object) {
+                            dest[name] = this.mixinDeep(dest[name], source[name]);
+                        } else {
+                            dest[name] = source[name];
+                        }
+                    } catch (e) {
+                        // Property in destination object not set. Create it and set its value.
+                        dest[name] = source[name];
+                    }
+                }
+            }
+            return dest;
         }
     });
 });

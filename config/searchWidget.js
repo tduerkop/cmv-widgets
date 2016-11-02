@@ -1,18 +1,43 @@
+/*eslint no-alert: 0*/
 define([
     'dojo/on',
+    'dojo/_base/lang',
     'dojo/date/locale'
-], function (on, locale) {
+], function (on, lang, locale) {
 
     function formatDateTime (value) {
-        var date = new Date(value);
-        return locale.format(date, {
-            formatLength: 'short'
-        });
+        if (value instanceof Date) {
+            return locale.format(value, {
+                formatLength: 'short'
+            });
+        }
+        return '';
+    }
+
+    function formatDate (value) {
+        if (value instanceof Date) {
+            return locale.format(value, {
+                selector: 'date',
+                formatLength: 'medium'
+            });
+        }
+        return '';
+    }
+
+    function getDateTime (value) {
+        if (isNaN(value) || value === 0 || value === null) {
+            return null;
+        }
+        return new Date(value);
     }
 
     return {
         map: true,
         mapClickMode: true,
+
+        queryStringOptions: {
+            valueParameter: 'NAME'
+        },
 
         layers: [
             {
@@ -41,8 +66,7 @@ define([
                                 name: 'Type of Damage',
                                 label: 'Type of Damage',
                                 expression: '(typdamage LIKE \'[value]%\')',
-                                placeholder: 'Enter the text Destroyed, Major or Minor',
-                                minChars: 3
+                                values: ['*', 'Destroyed', 'Major', 'Minor']
                             }
                         ],
 
@@ -59,7 +83,7 @@ define([
                                     label: 'Inspected',
                                     width: 150,
                                     get: function (object) { // allow export as a proper date
-                                        return new Date(object.inspdate);
+                                        return getDateTime(object.inspdate);
                                     },
                                     formatter: formatDateTime
                                 },
@@ -83,7 +107,7 @@ define([
                                     field: 'lastupdate',
                                     label: 'Updated',
                                     get: function (object) { // allow export as a proper date
-                                        return new Date(object.lastupdate);
+                                        return getDateTime(object.lastupdate);
                                     },
                                     formatter: formatDateTime
                                 }
@@ -115,7 +139,7 @@ define([
                             {
                                 name: 'Hospital Name',
                                 label: 'Name',
-                                expression: '(NAME LIKE \'[value]%\')',
+                                expression: '(NAME LIKE \'%[value]%\')',
                                 placeholder: 'Enter the name of the hospital',
                                 required: true,
                                 minChars: 3
@@ -142,7 +166,7 @@ define([
                                     id: 'Action',
                                     field: 'OBJECTID',
                                     label: 'Action',
-                                    width: 32,
+                                    width: 60,
                                     sortable: false,
                                     exportable: false,
                                     renderCell: function (object, value, node) {
@@ -154,8 +178,7 @@ define([
                                 },
                                 {
                                     field: 'NAME',
-                                    label: 'Name',
-                                    width: 150
+                                    label: 'Name'
                                 },
                                 {
                                     field: 'ADDRESS',
@@ -175,7 +198,7 @@ define([
                                 {
                                     field: 'ZIPCODE',
                                     label: 'Zip Code',
-                                    width: 80
+                                    width: 100
                                 },
                                 {
                                     field: 'TOTALADM',
@@ -185,9 +208,9 @@ define([
                                 {
                                     field: 'LASTUPDATE',
                                     label: 'Last Update',
-                                    width: 100,
+                                    width: 120,
                                     get: function (object) { // allow export as a proper date
-                                        return new Date(object.LASTUPDATE);
+                                        return getDateTime(object.LASTUPDATE);
                                     },
                                     formatter: formatDateTime
                                 }
@@ -217,12 +240,10 @@ define([
                         name: 'Search For Police Station By Name',
                         searchFields: [
                             {
-                                name: 'Police Station',
-                                label: 'Name',
-                                expression: '(PDNAME LIKE \'[value]%\')',
-                                placeholder: 'Enter the Name of the Police Station',
-                                required: true,
-                                minChars: 3
+                                name: 'PDNAME',
+                                label: 'Station Name',
+                                expression: '(PDNAME = \'[value]\')',
+                                unique: true
                             }
                         ],
 
@@ -264,6 +285,66 @@ define([
                                 {
                                     attribute: 'PDNAME',
                                     descending: 'ASC'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                name: 'Public Safety by Name',
+                findOptions: {
+                    url: 'https://sampleserver1.arcgisonline.com/ArcGIS/rest/services/PublicSafety/PublicSafetyOperationalLayers/MapServer',
+                    layerIds: [1, 2, 3, 4, 5, 6, 7],
+                    searchFields: ['FDNAME, PDNAME', 'NAME', 'RESNAME']
+                },
+                attributeSearches: [
+                    {
+                        name: 'Search for Public Safety Locations By Name',
+                        searchFields: [
+                            {
+                                name: 'Name',
+                                label: 'Name',
+                                expression: '[value]%\')',
+                                placeholder: 'fdname, pdname, name or resname',
+                                required: true,
+                                minChars: 3
+                            }
+                        ],
+
+                        title: 'Public Safety Locations',
+                        topicID: 'findPublicSafterQuery',
+                        gridOptions: {
+                            columns: [
+                                {
+                                    field: 'value',
+                                    label: 'Name'
+                                },
+                                {
+                                    field: 'displayFieldName',
+                                    label: 'Field',
+                                    width: 150
+                                },
+                                {
+                                    field: 'layerName',
+                                    label: 'Layer',
+                                    width: 150
+                                },
+                                {
+                                    field: 'Last Update Date',
+                                    label: 'Last Updated',
+                                    width: 150,
+                                    get: function (object) { // allow export as a proper date
+                                        return new Date(object['Last Update Date']);
+                                    },
+                                    formatter: formatDate
+
+                                }
+                            ],
+                            sort: [
+                                {
+                                    attribute: 'Name',
+                                    descending: false
                                 }
                             ]
                         }

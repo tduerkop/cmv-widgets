@@ -1,4 +1,5 @@
 #Attributes Table Widget
+A highly configurable widget to display the results of one or more Query, Find or Geoprocessor Tasks.
 
 ##AttributesTable Class
 Adding Attributes Table to CMV
@@ -158,7 +159,7 @@ queryOptions:
         outputSpatialReference: 4326,
 
         /*
-            AGS REST URL to Query
+            AGS REST URL to use for QueryTask
             default is null
         */
         url: null,
@@ -180,6 +181,11 @@ queryOptions:
             A where clause for the query. default returns all records
         */
         where: '1=1',
+
+        /*
+            Whether the results should be added to existing results or clear them first
+        */
+        addToExisting: null,
 
         /*
             The geometry to apply to the spatial filter.
@@ -213,6 +219,78 @@ queryOptions:
         default Unique ID
     */
     idProperty: 'FID'
+
+},
+```
+
+
+---
+##find Options
+``` javascript
+findOptions:
+    // parameters for the FindTask
+
+    /*
+        AGS REST URL to  use for FindTask
+        default is null, Either a url or a layerID is required
+    */
+    url: null,
+
+    /*
+        If no url provided and the layerID is passed,
+        the url of the layer will be retrieved from the map.
+    */
+    layerID: null,
+
+    /*
+        The remaining options match those used in a FindTask:
+        https://developers.arcgis.com/javascript/jsapi/findparameters-amd.html
+    */
+
+    /*
+        The contains parameter determines whether to look for an exact match of the search text or not. If true, searches for a value that contains the searchText provided. This is a case-insensitive search. If false, searches for an exact match of the searchText string. The exact match is case-sensitive. The default is "true".
+    */
+    contains: true,
+
+    /*
+        An array of DynamicLayerInfos used to change the layer ordering or redefine the map. When set the find operation will perform the find against the dynamic layers.
+    */
+    dynamicLayerInfos: null,
+
+    /*
+        Array of layer definition expressions that allows you to filter the features of individual layers.
+    */
+    layerDefinitions: null,
+
+    /*
+        The layers to perform the find operation on. The layers are specified as a comma-separated list of layer ids.
+    */
+    layerIds: null,
+
+    /*
+        The maximum allowable offset used for generalizing geometries returned by the find operation. The offset is in the units of the spatialReference. If a spatialReference is not defined the spatial reference of the map is used.
+    */
+    maxAllowableOffset: null,
+
+    /*
+        The spatial reference of the output geometries. If outSpatialReference is not specified, the output geometries are returned in the spatial reference of the map.
+    */
+    outSpatialReference: null,
+
+    /*
+        If "true", the result set include the geometry associated with each result. The default is "true".
+    */
+    returnGeometry: true,
+
+    /*
+        The names of the fields of a layer to search. The fields are specified as a comma-separated list of field names. If this parameter is not specified, all fields are searched.
+    */
+    searchFields: null,
+
+    /*
+        The search string text that is searched across the layers and the fields as specified in the layerIds and searchFields parameters.
+    */
+    searchText: null
 
 },
 ```
@@ -350,6 +428,11 @@ toolbarOptions: {
         selected: true,
 
         /*
+            Allow the user to zoom to the source graphic(s)
+        */
+        source: true,
+
+        /*
             Allow the user to zoom to the buffer
         */
         buffer: true
@@ -371,6 +454,11 @@ toolbarOptions: {
             Allow the user to clear the selected features
         */
         selected: true,
+
+        /*
+            Allow the user to clear the source graphic(s)
+        */
+        source: true,
 
         /*
             Allow the user to clear the buffer
@@ -680,8 +768,8 @@ The Attribute Table publishes the following topics. The topicID should be unique
 // publishes to the central error handler when an unexpected error occurs
 'viewer/handleError'
 
-// publishes to the central pane management to open/close the pane containing the Attribute Table
-'viewer/togglePane'
+// published when a table is updated in some way.
+topicID + '/tableUpdated'
 
 // publishes the raw results of the QueryTask
 topicID + '/queryResults'
@@ -711,6 +799,15 @@ topicID + '/addTab'
 
 // remove a tab from the tab strip
 topicID + '/removeTab'
+
+// select a tab in the tab strip
+topicID + '/selectTab'
+
+// open the associated sidebar pane if it exists
+topicID + '/openPane'
+
+// open the associated sidebar pane if it exists
+topicID + '/closePane'
 ```
 
 ### Published Topics
@@ -721,4 +818,10 @@ topicID + '/tableAdded'
 
 // published when a table is removed. returns the id of the table removed.
 topicID + '/tableRemoved'
+
+// published when a table is updated in some way.
+topicID + '/tableUpdated'
+
+// publishes to the central pane management to open/close the pane containing the Attribute Table
+'viewer/togglePane'
 ```

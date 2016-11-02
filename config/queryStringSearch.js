@@ -7,15 +7,15 @@ define([
     var qsObj = ioQuery.queryToObject(qs);
     var fips = qsObj.fips || '';
 
-	return {
-		isDebug: false,
+    return {
+        isDebug: false,
 
-		mapOptions: {
+        mapOptions: {
             basemap: 'streets',
             center: [-96.59179687497497, 39.09596293629694],
             zoom: 5,
-			sliderStyle: 'small'
-		},
+            sliderStyle: 'small'
+        },
 
         panes: {
             left: {
@@ -33,10 +33,9 @@ define([
             }
         },
 
-		operationalLayers: [
-        ],
+        operationalLayers: [],
 
-		widgets: {
+        widgets: {
             growler: {
                 include: true,
                 id: 'growler',
@@ -68,7 +67,7 @@ define([
                             topicID: 'censusQuery',
                             queryOptions: {
                                 queryParameters: {
-                                    url: 'http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Demographics/ESRI_Census_USA/MapServer/4',
+                                    url: 'https://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Demographics/ESRI_Census_USA/MapServer/4',
                                     where: 'FIPS = \'' + fips + '\''
                                 },
                                 idProperty: 'ObjectID'
@@ -80,6 +79,6 @@ define([
                     ]
                 }
             }
-		}
-	};
+        }
+    };
 });

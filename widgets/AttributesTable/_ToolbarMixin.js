@@ -1,3 +1,4 @@
+/*eslint dot-notation: 0 */
 define([
     'dojo/_base/declare',
     'dojo/_base/lang',
@@ -35,6 +36,7 @@ define([
                 grid: true,
                 features: true,
                 selected: true,
+                source: true,
                 buffer: true
             },
 
@@ -90,7 +92,10 @@ define([
             display = (options.selected && featOptions.selected) ? 'block' : 'none';
             domStyle.set(this.attributesTableZoomToSelected.domNode, 'display', display);
 
-            display = (options.buffer && featOptions.buffer) ? 'block' : 'none';
+            display = (options.source && featOptions.source) ? 'block' : 'none';
+            domStyle.set(this.attributesTableZoomToSource.domNode, 'display', display);
+
+            display = (options.buffer) ? 'block' : 'none';
             domStyle.set(this.attributesTableZoomToBuffer.domNode, 'display', display);
         },
 
@@ -112,9 +117,17 @@ define([
             itemCount += (display === 'none') ? 0 : 1;
             domStyle.set(this.attributesTableClearSelected.domNode, 'display', display);
 
-            display = (options.buffer && featOptions.buffer) ? 'block' : 'none';
+            display = (options.source && featOptions.source) ? 'block' : 'none';
+            itemCount += (display === 'none') ? 0 : 1;
+            domStyle.set(this.attributesTableClearSource.domNode, 'display', display);
+
+            display = (options.buffer) ? 'block' : 'none';
             itemCount += (display === 'none') ? 0 : 1;
             domStyle.set(this.attributesTableClearBuffer.domNode, 'display', display);
+
+            display = (options.selected && featOptions.selected) ? 'block' : 'none';
+            itemCount += (display === 'none') ? 0 : 1;
+            domStyle.set(this.attributesTableClearSelectedRecords.domNode, 'display', display);
 
             //display = (options.show) ? 'block' : 'none';
             display = (itemCount > 1) ? 'block' : 'none';
@@ -126,18 +139,23 @@ define([
             var feat = this.features;
             var store = this.grid.get('store');
 
-            disabled = ((feat && feat.length > 0) || (store.data && store.data.length > 0)) ? false : true;
+            var disabled = ((feat && feat.length > 0) || (store.data && store.data.length > 0)) ? false : true;
             this.attributesTableExportButton.set('disabled', disabled);
             this.attributesTableZoomDropDownButton.set('disabled', disabled);
             this.attributesTableClearDropDownButton.set('disabled', disabled);
 
-            var disabled = (feat && feat.length > 0) ? false : true;
+            disabled = (feat && feat.length > 0) ? false : true;
             this.attributesTableClearFeatures.set('disabled', disabled);
             this.attributesTableZoomToFeatures.set('disabled', disabled);
 
             disabled = (this.selectedGraphics && this.selectedGraphics.graphics && this.selectedGraphics.graphics.length > 0) ? false : true;
             this.attributesTableClearSelected.set('disabled', disabled);
             this.attributesTableZoomToSelected.set('disabled', disabled);
+            this.attributesTableClearSelectedRecords.set('disabled', disabled);
+
+            disabled = (this.sourceGraphics && this.sourceGraphics.graphics && this.sourceGraphics.graphics.length > 0) ? false : true;
+            this.attributesTableClearSource.set('disabled', disabled);
+            this.attributesTableZoomToSource.set('disabled', disabled);
 
             disabled = (this.bufferGraphics && this.bufferGraphics.graphics.length > 0) ? false : true;
             this.attributesTableClearBuffer.set('disabled', disabled);

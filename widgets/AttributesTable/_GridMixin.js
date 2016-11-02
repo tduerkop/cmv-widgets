@@ -1,6 +1,7 @@
 define([
     'dojo/_base/declare',
     'dojo/_base/lang',
+    'dojo/topic',
     'dojo/sniff',
     'dojo/_base/array',
     'dojo/date/locale',
@@ -17,6 +18,7 @@ define([
 ], function (
     declare,
     lang,
+    topic,
     has,
     array,
     locale,
@@ -134,30 +136,37 @@ define([
         },
 
         populateGrid: function (options) {
-            var results = options;
+            var features, results = options;
             if (options.results) {
                 results = options.results;
+            } else {
+                options = null; // no options when it is also the results
             }
 
             if (!this.results) {
                 this.results = results;
+                features = this.getFeaturesFromResults();
+            } else {
+                features = this.getFeatures();
             }
             if (!this.idProperty) {
                 this.getIdProperty(results);
             }
 
+            /* apparently not used
             var delim = '', linkField = this.linkField;
             var filteredFields = array.filter(results.fields, function (field) {
                 return (field.name === linkField);
             });
-            if (filteredFields.length >0) {
+            if (filteredFields.length > 0) {
                 if (filteredFields[0].type === 'esriFieldTypeString') {
                     delim = '\'';
                 }
             }
+            */
 
-            var features = this.getFeaturesFromResults();
             var rows = [];
+
             array.forEach(features, lang.hitch(this, function (feature) {
                 // relationship query
                 if (feature.relatedRecords) {
@@ -192,7 +201,7 @@ define([
 
         getRecordFromFeature: function (feature) {
             var rows = [], delim = '';
-            var lq =  null;
+            var lq = null;
             if (this.hasLinkedQuery()) {
                 lq = this.linkedQuery;
             }
@@ -218,7 +227,7 @@ define([
 
         getRelatedRecords: function (feature) {
             var rows = [], delim = '', objectID = feature.objectId;
-            var lq =  null;
+            var lq = null;
             if (this.hasLinkedQuery()) {
                 lq = this.linkedQuery;
             }
@@ -242,14 +251,17 @@ define([
         },
 
         getColumnsAndSort: function (results, options) {
-            // reset the columns?
-            if (options.columns) {
-                this.gridOptions.columns = options.columns;
-            }
 
-            // reset the sort?
-            if (options.sort) {
-                this.gridOptions.sort = options.sort;
+            if (options) {
+                // reset the columns?
+                if (options.columns) {
+                    this.gridOptions.columns = options.columns;
+                }
+
+                // reset the sort?
+                if (options.sort) {
+                    this.gridOptions.sort = options.sort;
+                }
             }
 
             // set the columns
@@ -269,7 +281,7 @@ define([
             // set the sort
             var sort = this.gridOptions.sort || [];
             // sort === 'inherit'? use query result order
-            if (typeof sort === 'string' && sort.toLowerCase() === 'inherit'){
+            if (typeof(sort) === 'string' && sort.toLowerCase() === 'inherit') {
                 return;
             }
             // no sort? use the first column
@@ -314,23 +326,25 @@ define([
                             width: 100
                         };
                         switch (field.type) {
-                            case 'esriFieldTypeString':
-                                col.width = 150;
-                                break;
-                            case 'esriFieldTypeSmallInteger':
-                            case 'esriFieldTypeInteger':
-                                col.formatter = formatNumber;
-                                col.style += 'text-align:right;';
-                                break;
-                            case 'esriFieldTypeSingle':
-                            case 'esriFieldTypeDouble':
-                                col.formatter = formatSingleDouble;
-                                col.style += 'text-align:right;';
-                                break;
-                            case 'esriFieldTypeDate':
-                                col.width = 150;
-                                col.formatter = formatDateTime;
-                                break;
+                        case 'esriFieldTypeString':
+                            col.width = 150;
+                            break;
+                        case 'esriFieldTypeSmallInteger':
+                        case 'esriFieldTypeInteger':
+                            col.formatter = formatNumber;
+                            col.style += 'text-align:right;';
+                            break;
+                        case 'esriFieldTypeSingle':
+                        case 'esriFieldTypeDouble':
+                            col.formatter = formatSingleDouble;
+                            col.style += 'text-align:right;';
+                            break;
+                        case 'esriFieldTypeDate':
+                            col.width = 150;
+                            col.formatter = formatDateTime;
+                            break;
+                        default:
+                            break;
                         }
                         columns.push(col);
                     }
@@ -404,6 +418,30 @@ define([
                 this.grid.refresh();
             }
             this.setToolbarButtons();
+            topic.publish(this.attributesContainerID + '/tableUpdated', this);
+        },
+
+        clearSelectedGridRows: function () {
+            if (!this.grid) {
+                return null;
+            }
+
+            var selection = lang.clone(this.grid.get('selection'));
+            var store = this.grid.get('store');
+
+            if (!selection || !store) {
+                return null;
+            }
+
+            for (var key in selection) {
+                if (selection.hasOwnProperty(key) && selection[key] === true) {
+                    store.remove(key);
+                }
+            }
+
+            this.grid.refresh();
+
+            return {selection: selection, idProperty: this.idProperty};
         }
 
     });

@@ -1,6 +1,7 @@
 # CMV-Widgets
 
-[![Join the chat at https://gitter.im/tmcgee/cmv-widgets](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/tmcgee/cmv-widgets?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](http://travis-ci.org/tmcgee/cmv-widgets.svg?branch=master)](http://travis-ci.org/tmcgee/cmv-widgets) [![Code Climate](https://codeclimate.com/github/tmcgee/cmv-widgets/badges/gpa.svg)](https://codeclimate.com/github/tmcgee/cmv-widgets) [![Join the chat at https://gitter.im/tmcgee/cmv-widgets](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/tmcgee/cmv-widgets?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 
 Widgets for [CMV](http://cmv.io/), the Configurable Map Viewer created by [Tim McGee](https://github.com/tmcgee) of [MoosePoint Technology](http://moosepoint.com/)
 
@@ -10,7 +11,7 @@ Widgets for [CMV](http://cmv.io/), the Configurable Map Viewer created by [Tim M
 Each widget in this repo has at least one configuration example in the [config folder](https://github.com/tmcgee/cmv-widgets/tree/master/config). This folder also contains additional examples for including ESRI widgets, other widgets and functionality.
 
 ### Attributes Table(s)
-A highly configurable widget to display the results of one or more QueryTasks.
+A highly configurable widget to display the results of one or more Query, Find or Geoprocessor Tasks.
 #####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/AttributesTable/README.md)
 #####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=table)
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/attributesTables1.jpg)
@@ -36,6 +37,13 @@ Export features from the [Attributes Tables](https://github.com/tmcgee/cmv-widge
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/export1.jpg)
 
 ---
+### FullScreen
+A simple widget containing a button to toggle the CMV map to a maximized full screen view and restore it to the original dimensions.
+#####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/FullScreen/README.md)
+#####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=fullscreen)
+![Screenshot](https://tmcgee.github.io/cmv-widgets/images/fullscreen1.jpg)
+
+---
 ### Geoprocessor
 An example widget demonstrating the display of results from a Geoprocessing Task in the [Attributes Tables](https://github.com/tmcgee/cmv-widgets#attributes-tables) widget.
 #####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=geoprocessor)
@@ -54,7 +62,7 @@ An updated version of the PrintPlus widget originally created by [@LarryStout](h
 
 ---
 ###Search
-Used in conjunction with the [Attributes Tables](https://github.com/tmcgee/cmv-widgets#attributes-tables) widget to provide a user interface for querying feature layers, tables and related records.
+Used in conjunction with the [Attributes Tables](https://github.com/tmcgee/cmv-widgets#attributes-tables) to provide a user interface for querying feature layers, dynamic layers, tables and related records using QueryTask and FindTask.
 #####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/Search/README.md)
 #####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=search)
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/search1.jpg)
@@ -67,6 +75,12 @@ Share your map by using Facebook, Twitter, Google+, E-Mail, Link, or embedded iF
 #####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/Share/README.md)
 #####[Demo](http://tmcgee.github.io/cmv-widgets/demo.html?config=share)
 ![Screenshot](https://tmcgee.github.io/cmv-widgets/images/share1.jpg)
+
+---
+### What3Words
+A simple widget to send a 3 word address or lat/lng to what3words and zoom the map to the resulting location. The lat/lng and 3 word address for the location are displayed from the search result.
+#####[Documentation](https://github.com/tmcgee/cmv-widgets/tree/master/widgets/What3Words/README.md)
+![Screenshot](https://tmcgee.github.io/cmv-widgets/images/what3words1.jpg)
 
 ---
 ### Zoom to Feature

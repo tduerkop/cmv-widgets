@@ -1,3 +1,4 @@
+/*eslint strict: 0 */
 define([
     'dojo/_base/declare',
     'dijit/_WidgetBase',
@@ -49,6 +50,7 @@ define([
 
         excel: true,        // allow attributes to be exported to Excel
         csv: true,          // allow attributes to be exported to CSV
+        xlsExcel: true,		// allow attributes to be exported to Excel (XLS format)
 
         // spatial exports are not ready
         //geojson: false,     // allow features to be exported to GeoJSON
@@ -61,7 +63,7 @@ define([
         // optional grid if you want to export only visible columns and use column names
         grid: null,
 
-        postCreate: function() {
+        postCreate: function () {
             this.inherited(arguments);
             this.parentWidget.draggable = this.draggable;
 
@@ -95,9 +97,10 @@ define([
             var options = [];
             var exportOptions = [
                 {value: 'excel', label: i18n.exportToExcel, type: 'attributes'},
+                {value: 'xlsExcel', label: i18n.exportToXlsExcel, type: 'attributes'},
                 {value: 'csv', label: i18n.exportToCSV, type: 'attributes'},
                 {value: 'geojson', label: i18n.exportToGeoJSON, type: 'features'},
-                {value: 'shapefile', label: i18n.exportToShapeFile , type: 'features'}
+                {value: 'shapefile', label: i18n.exportToShapeFile, type: 'features'}
             ];
 
             this.selectExportType.set('options', []);
@@ -130,11 +133,14 @@ define([
             this.results = options.results;
             this.grid = options.grid;
 
-            if (options.excel !== undefined) {
+            if (typeof(options.excel) !== 'undefined') {
                 this.excel = options.excel;
             }
-            if (options.csv !== undefined) {
+            if (typeof(options.csv) !== 'undefined') {
                 this.csv = options.csv;
+            }
+            if (typeof(options.xlsExcel) !== 'undefined') {
+                this.xlsExcel = options.xlsExcel;
             }
             /*
             if (options.geojson !== undefined) {
@@ -150,6 +156,13 @@ define([
             if (options.show) {
                 this.parentWidget.show();
             }
+        },
+
+        getFileName: function (extension) {
+            if (this.filename) {
+                return (typeof this.filename === 'function' ? this.filename(this) + extension : this.filename + extension);
+            }
+            return 'result' + extension;
         },
 
         /*******************************
@@ -171,12 +184,79 @@ define([
             case 'shapefile':
                 this.exportToShapeFile();
                 break;
+            case 'xlsExcel':
+                this.exportToXLS();
+                break;
+            default:
+                break;
             }
         },
 
         /*******************************
         *  Excel/CSV Functions
         *******************************/
+
+        exportToXLS: function () {
+            var xlsContents = this.buildXLSContents();
+            if (!xlsContents) {
+                topic.publish('viewer/handleError', {
+                    widget: 'Export',
+                    error: '${i18n.errorExcel}'
+                });
+                return;
+            }
+
+            // To UTF-8
+            var uint8 = new Uint8Array(xlsContents.length);
+            for (var i = 0; i < uint8.length; i++) {
+                uint8[i] = xlsContents.charCodeAt(i);
+            }
+
+            this.downloadFile(uint8, 'application/vnd.ms-excel', 'results.xls', true);
+        },
+
+        buildXLSContents: function () {
+            var separator = '\t';
+            var carriageReturn = '\r';
+            var rows = this.grid.get('store').data;
+            var columns = this.grid.get('columns');
+
+            // Prepare formatted columns
+            var formattedColumns = columns.map(function (column) {
+                if (column.exportable !== false && column.hidden !== true) {
+                    return column.label || column.field;
+                }
+                return null;
+            });
+
+            var formattedRows = [];
+
+            // Prepare rows' contents
+            array.forEach(rows, function (row) {
+                var formattedRow = [];
+
+                array.forEach(columns, function (column) {
+                    if (column.exportable !== false && column.hidden !== true) {
+                        var field = column.field;
+                        var val = row[field];
+
+                        if (column.get) {
+                            val = column.get(row);
+                        }
+                        if (val === null || val === 'undefined') {
+                            formattedRow.push('');
+                            return;
+                        }
+
+                        formattedRow.push(val.toString());
+                    }
+                });
+
+                formattedRows.push(formattedRow.join(separator));
+            });
+
+            return formattedColumns.join(separator) + carriageReturn + formattedRows.join(carriageReturn);
+        },
 
         exportToXLSX: function () {
             var ws = this.createXLSX();
@@ -199,14 +279,14 @@ define([
                 type: 'binary'
             });
 
-            this.downloadFile(this.s2ab(wbout), 'application/vnd.ms-excel;', 'results.xlsx', true);
+            this.downloadFile(this.s2ab(wbout), 'application/vnd.ms-excel;', this.getFileName('.xlsx'), true);
         },
 
         s2ab: function (s) {
             var buf = new ArrayBuffer(s.length);
             var view = new Uint8Array(buf);
             /*jslint bitwise: true */
-            for (var i=0; i!=s.length; ++i) {
+            for (var i = 0; i < s.length; ++i) {
                 view[i] = s.charCodeAt(i) & 0xFF;
             }
             /*jslint bitwise: false */
@@ -223,7 +303,8 @@ define([
                 return;
             }
             var csv = window.XLSX.utils.sheet_to_csv(ws);
-            this.downloadFile(csv, 'text/csv;charset=utf-8;', 'results.csv', true);
+
+            this.downloadFile(csv, 'text/csv;charset=utf-8;', this.getFileName('.csv'), true);
         },
 
         createXLSX: function () {
@@ -234,7 +315,7 @@ define([
 
             // function to format dates as numbers as GMT.
             // ** TODO ** Need to adjust to local time zone.
-            function datenum(v, date1904) {
+            function datenum (v, date1904) {
                 if (date1904) {
                     v += 1462;
                 }
@@ -242,7 +323,7 @@ define([
                 return (epoch - new Date(Date.UTC(1899, 11, 30))) / (24 * 60 * 60 * 1000);
             }
 
-            var ws = {}, cell, cell_ref;
+            var ws = {}, cell, cellRef;
             var range = {
                 s: {
                     c: 0,
@@ -256,7 +337,7 @@ define([
 
             var c = 0,
                 field, val;
-            var aliases = null; //this.results.fieldAliases;
+            var aliases = (this.results && this.results.fieldAliases) ? this.results.fieldAliases : {};
             var rc = this.getRowsAndColumns();
             var rows = rc.rows;
             var columns = rc.columns;
@@ -269,11 +350,11 @@ define([
                         v: column.label || aliases[column.field] || column.field,
                         t: 's'
                     };
-                    cell_ref = xlsx.utils.encode_cell({
+                    cellRef = xlsx.utils.encode_cell({
                         c: c,
                         r: 0
                     });
-                    ws[cell_ref] = cell;
+                    ws[cellRef] = cell;
                     wscols.push({
                         wpx: (!isNaN(column.width)) ? (column.width * 1.2) : 200
                     });
@@ -296,13 +377,11 @@ define([
                     if (column.exportable !== false && column.hidden !== true) {
                         field = column.field;
                         val = row[field];
-                        /*
-                        // this was specific to Stor; do we lose anything by removing it?
+
                         if (column.get) {
                             val = column.get(row);
-
                         }
-                        */
+
                         if (val === null) {
                             c++;
                             return;
@@ -326,11 +405,11 @@ define([
                         }
 
                         //store the cell in the worksheet
-                        cell_ref = xlsx.utils.encode_cell({
+                        cellRef = xlsx.utils.encode_cell({
                             c: c,
                             r: r
                         });
-                        ws[cell_ref] = cell;
+                        ws[cellRef] = cell;
 
                         c++;
                     }
@@ -352,7 +431,7 @@ define([
             if (this.excel || this.csv) {
                 require([
                     // consider making this a local library
-                    '//cdnjs.cloudflare.com/ajax/libs/xlsx/0.7.8/xlsx.core.min.js'
+                    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.7.8/xlsx.core.min.js'
                 ]);
             }
         },
@@ -374,7 +453,6 @@ define([
         },
 
         exportToShapeFile: function () {
-            alert('Export to Shape File is not yet available');
             return;
             /*
             var str = this.createGeoJSON();
@@ -421,28 +499,27 @@ define([
             if (this.geojson || this.shapefile) {
                 // consider making these local libraries
                 require([
-                    '//cdn-geoweb.s3.amazonaws.com/terraformer/1.0.4/terraformer.min.js'
+                    'https://cdn-geoweb.s3.amazonaws.com/terraformer/1.0.5/terraformer.min.js'
                 ], function () {
                     require([
-                        '//cdn-geoweb.s3.amazonaws.com/terraformer-arcgis-parser/1.0.4/terraformer-arcgis-parser.min.js'
+                        'https://cdn-geoweb.s3.amazonaws.com/terraformer-arcgis-parser/1.0.4/terraformer-arcgis-parser.min.js'
                     ]);
                 });
             }
         },
 
-        getRowsAndColumns: function() {
+        getRowsAndColumns: function () {
             var rows = [];
             var columns = [];
-            if(this.grid) {
+            if (this.grid) {
                 rows = this.grid.get('store').data;
                 columns = this.grid.get('columns');
-            }
-            else if(this.featureSet) {
-                if(this.featureSet.features && this.featureSet.features.length > 0) {
+            } else if (this.featureSet) {
+                if (this.featureSet.features && this.featureSet.features.length > 0) {
                     columns = [];
                     var firstFeature = this.featureSet.features[0];
-                    for(var key in firstFeature.attributes) {
-                        if(firstFeature.attributes.hasOwnProperty(key)) {
+                    for (var key in firstFeature.attributes) {
+                        if (firstFeature.attributes.hasOwnProperty(key)) {
                             columns.push({
                                 exportable: true,
                                 hidden: false,
@@ -452,17 +529,12 @@ define([
                             });
                         }
                     }
-                    rows = array.map(this.featureSet.features, function(aFeature) {
+                    rows = array.map(this.featureSet.features, function (aFeature) {
                         return aFeature.attributes;
                     });
                 }
-                else {
-                    // cannot build columns because nothing to export; not really an error;
-                }
             }
-            else {
-                // no datasource was provided; was not an error, so still not an error;
-            }
+
             return {
                 rows: rows,
                 columns: columns
@@ -484,7 +556,7 @@ define([
             });
 
             // feature detection
-            if (link.download !== undefined) {
+            if (typeof(link.download) !== 'undefined') {
                 // Browsers that support HTML5 download attribute
                 if (useBlob) {
                     url = window.URL.createObjectURL(blob);
@@ -497,16 +569,17 @@ define([
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                return;
+                return null;
 
              //feature detection using IE10+ routine
             } else if (navigator.msSaveOrOpenBlob) {
                 return navigator.msSaveOrOpenBlob(blob, fileName);
-            } else {
-                window.open(dataURI);
-                window.focus();
-                return;
             }
+
+            // catch all. for which browsers?
+            window.open(dataURI);
+            window.focus();
+            return null;
 
         }
     });
